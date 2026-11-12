@@ -123,6 +123,68 @@ class ProjectResourceTest {
     }
     @Test @TestSecurity(user = "lead", roles = "lead")
     @JwtSecurity(claims = {@Claim(key = "sub", value = "lead-id")})
+    void updateDoesNotRetargetQueuedOrRunningBuilds() {
+        Long id = project("lead-id", false);
+        Long queued = build(id, "QUEUED");
+        Long running = build(id, "RUNNING");
+        String originalUrl = "https://github.com/original/repository.git";
+        String updatedName = "updated-" + java.util.UUID.randomUUID();
+        try {
+            QuarkusTransaction.requiringNew().run(() -> {
+                Project p = Project.findById(id);
+                Build queuedBuild = Build.findById(queued);
+                Build runningBuild = Build.findById(running);
+                p.repositoryUrl = originalUrl;
+                queuedBuild.repositoryUrl = originalUrl;
+                runningBuild.repositoryUrl = originalUrl;
+            });
+            given().contentType("application/json")
+                .body("{\"name\":\"" + updatedName + "\",\"repositoryUrl\":\"https://github.com/updated/repository.git\",\"privateRepository\":true}")
+                .when().put("/api/projects/" + id).then().statusCode(200)
+                .body("name", equalTo(updatedName), "repositoryUrl", equalTo("https://github.com/updated/repository.git"));
+            QuarkusTransaction.requiringNew().run(() -> {
+                Project updated = Project.findById(id);
+                Build queuedBuild = Build.findById(queued);
+                Build runningBuild = Build.findById(running);
+                assertEquals("https://github.com/updated/repository.git", updated.repositoryUrl);
+                assertEquals(originalUrl, queuedBuild.repositoryUrl);
+                assertEquals(originalUrl, runningBuild.repositoryUrl);
+            });
+        } finally {
+            QuarkusTransaction.requiringNew().run(() -> {
+                Build.deleteById(queued);
+                Build.deleteById(running);
+                Project.deleteById(id);
+            });
+        }
+    }
+    @Test @TestSecurity(user = "lead", roles = "lead")
+    @JwtSecurity(claims = {@Claim(key = "sub", value = "lead-id")})
+    void duplicateUpdateLeavesProjectUnchanged() {
+        Long originalId = project("lead-id", false);
+        Long duplicateId = project("lead-id", false);
+        Project before = QuarkusTransaction.requiringNew().call(() -> Project.findById(originalId));
+        String duplicateName = QuarkusTransaction.requiringNew().call(() -> Project.<Project>findById(duplicateId).name);
+        try {
+            given().contentType("application/json")
+                .body("{\"name\":\"" + duplicateName + "\",\"repositoryUrl\":\"https://github.com/unique/repository.git\",\"privateRepository\":true}")
+                .when().put("/api/projects/" + originalId).then().statusCode(409)
+                .body("error", containsString("name"));
+            QuarkusTransaction.requiringNew().run(() -> {
+                Project unchanged = Project.findById(originalId);
+                assertEquals(before.name, unchanged.name);
+                assertEquals(before.repositoryUrl, unchanged.repositoryUrl);
+                assertFalse(unchanged.privateRepository);
+            });
+        } finally {
+            QuarkusTransaction.requiringNew().run(() -> {
+                Project.deleteById(originalId);
+                Project.deleteById(duplicateId);
+            });
+        }
+    }
+    @Test @TestSecurity(user = "lead", roles = "lead")
+    @JwtSecurity(claims = {@Claim(key = "sub", value = "lead-id")})
     void rejectsUrlsWithoutRepository() {
         for (String url : new String[] {"https://example.com/", "https://example.com", "https://example.com/.git", "https://github.com/repo.git?x=1", "https://example.com/repo#top"}) {
             given().contentType("application/json").body("{\"name\":\"suffix\",\"repositoryUrl\":\"" + url + "\"}")

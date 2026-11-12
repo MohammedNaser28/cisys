@@ -44,6 +44,7 @@ public class ProjectResource {
     private static final Pattern NAME = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,99}");
     static final String NAME_RULE = "Project names use letters, digits, '.', '_' and '-', and start with a letter or digit";
     public record CreateProject(String name, String repositoryUrl, boolean privateRepository) {}
+    public record UpdateProject(String name, String repositoryUrl, boolean privateRepository) {}
     /** The owner's subject is for admins only; everyone else gets {@code owned}. */
     public record ProjectResponse(Long id, String name, String repositoryUrl, boolean privateRepository, boolean owned,
                                   @JsonInclude(JsonInclude.Include.NON_NULL) String ownerSubject) {}
@@ -95,6 +96,88 @@ public class ProjectResource {
         p.delete();
         return Response.noContent().build();
     }
+    /**
+     * Updates a project. Admins can update any project; leads can only update their own projects.
+     * Unlike {@link #delete(Long)} this is safe while builds are queued or running, so it takes no
+     * queue lock and rejects nothing: a build snapshots the repository URL, branch, image, command and
+     * credential reference on its Build row when submitted (BuildRunner.submit) and the runner works
+     * from that snapshot and never re-reads the project, so in-flight builds keep building what was
+     * requested and edits affect only new page views and new builds.
+     */
+    @PUT
+    @Path("/projects/{id}")
+    @Transactional
+    public Response update(@PathParam("id") Long id, UpdateProject input) {
+        if (!identity.hasRole("lead") && !identity.hasRole("admin"))
+            throw new ForbiddenException();
+
+        Project p = Project.findById(id);
+
+        boolean admin = identity.hasRole("admin");
+        boolean owner = p != null && subject().equals(p.ownerSubject);
+
+        // Private projects the caller cannot see answer 404.
+        if (p == null || (p.privateRepository && !admin && !owner))
+            throw new NotFoundException();
+
+        if (!admin && !owner)
+            throw new ForbiddenException();
+
+        if (input == null
+                || input.name() == null
+                || input.name().isBlank()
+                || input.name().length() > 100
+                || input.repositoryUrl() == null
+                || input.repositoryUrl().length() > 2048) {
+            throw new BadRequestException("Name and repository URL are required");
+        }
+
+        String name = input.name().trim();
+
+        if (!NAME.matcher(name).matches())
+            throw badRequest(NAME_RULE);
+
+        String url;
+        try {
+            url = gitUrl(input.repositoryUrl().trim());
+        } catch (WebApplicationException e) {
+            throw e;
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException(RepositoryUrls.SHAPE);
+        }
+
+        try {
+            repositoryUrls.validate(url);
+        } catch (IllegalArgumentException e) {
+            throw badRequest(e.getMessage());
+        }
+
+        // Exclude the current project from uniqueness checks.
+        if (Project.count(
+                "lower(name) = ?1 and id <> ?2",
+                name.toLowerCase(Locale.ROOT), id) > 0) {
+            throw conflict("A project with this name already exists");
+        }
+
+        if (Project.count(
+                "repositoryUrl = ?1 and id <> ?2",
+                url, id) > 0) {
+            throw conflict("A project with this repository URL already exists");
+        }
+
+        p.name = name;
+        p.repositoryUrl = url;
+        p.privateRepository = input.privateRepository();
+
+        try {
+            p.persistAndFlush();
+        } catch (PersistenceException e) {
+            throw conflict("A project with this name or repository URL already exists");
+        }
+
+        return Response.ok(response(p)).build();
+    }
+
     /** Repository URLs name the Git repository itself: https://github.com/org/repo becomes https://github.com/org/repo.git. */
     static String gitUrl(String url) {
         String trimmed = url.replaceAll("/+$", "");
@@ -104,6 +187,7 @@ public class ProjectResource {
             throw badRequest("Use the repository's URL, for example https://github.com/org/repo.git");
         return path.endsWith(".git") ? trimmed : trimmed + ".git";
     }
+
     private static WebApplicationException badRequest(String message) {
         return new WebApplicationException(Response.status(400).type(MediaType.APPLICATION_JSON).entity(Map.of("error", message)).build());
     }

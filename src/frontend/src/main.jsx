@@ -9,7 +9,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import Keycloak from 'keycloak-js';
-import { FolderGit2, LockKeyhole, LockKeyholeOpen, Moon, Sun, LogOut, ChevronDown, CircleUserRound, Plus, Trash2, UserRound } from 'lucide-react';
+import { FolderGit2, Hammer, LockKeyhole, LockKeyholeOpen, Moon, Sun, LogOut, ChevronDown, CircleUserRound, Pencil, Plus, Trash2, UserRound } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { Label } from './components/ui/label';
@@ -78,6 +78,7 @@ function App() {
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
   const [priv, setPriv] = useState(false);
+  const [editingProjectId, setEditingProjectId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [images, setImages] = useState([]);
   const [branding, setBranding] = useState(null);
@@ -163,6 +164,8 @@ function App() {
 
   // Switches to an in-app page, leaving any project URL behind.
   function go(target) {
+    if (submitting) return;
+    cancelEdit();
     if (window.location.pathname !== '/') window.history.pushState(null, '', '/');
     setProjectName(null);
     setProjectBranch('');
@@ -171,6 +174,8 @@ function App() {
   }
 
   function openProject(name, branch = '') {
+    if (submitting) return;
+    cancelEdit();
     window.history.pushState(null, '', projectPath(name));
     setProjectName(name);
     setProjectBranch(branch);
@@ -184,14 +189,38 @@ function App() {
     setBuildId(id);
   }
 
-  async function create(event) {
+  function resetProjectForm() {
+    setEditingProjectId(null);
+    setName('');
+    setUrl('');
+    setPriv(false);
+  }
+
+  function editProject(project) {
+    if (submitting) return;
+    setError('');
+    setEditingProjectId(project.id);
+    setName(project.name);
+    setUrl(project.repositoryUrl);
+    setPriv(project.privateRepository);
+  }
+
+  function cancelEdit() {
+    if (submitting) return;
+    setError('');
+    resetProjectForm();
+  }
+
+  async function submitProject(event) {
     event.preventDefault();
+    if (submitting) return;
     setError('');
     setSubmitting(true);
     try {
-      await api('/projects', { method: 'POST', body: JSON.stringify({ name, repositoryUrl: url, privateRepository: priv }) });
-      setName(''); setUrl(''); setPriv(false);
+      const editing = editingProjectId !== null;
+      await api(editing ? `/projects/${editingProjectId}` : '/projects', { method: editing ? 'PUT' : 'POST', body: JSON.stringify({ name, repositoryUrl: url, privateRepository: priv }) });
       setProjects(await api('/projects'));
+      resetProjectForm();
     } catch (e) {
       setError(e.message);
     } finally {
@@ -200,11 +229,14 @@ function App() {
   }
 
   async function deleteProject(project) {
+    if (submitting) return;
     if (!window.confirm(`Delete ${project.name} and all of its builds? This cannot be undone.`)) return;
     setError('');
     try {
       await api(`/projects/${project.id}`, { method: 'DELETE' });
       setProjects(await api('/projects'));
+      // Editing the deleted project would leave the form pointing at a missing project.
+      if (editingProjectId === project.id) resetProjectForm();
     } catch (e) {
       setError(e.message);
     }
@@ -225,6 +257,7 @@ function App() {
   const canCreate = user.roles.includes('lead') || user.roles.includes('admin');
   // Admins may delete any project; leads only the projects they own.
   const canDelete = (project) => user.roles.includes('admin') || (user.roles.includes('lead') && project.owned);
+  const canEdit = (project) => user.roles.includes('admin') || (user.roles.includes('lead') && project.owned);
   const role = user.roles.includes('admin') ? 'Admin' : user.roles.includes('lead') ? 'Lead' : 'Member';
 
   return (
@@ -266,13 +299,13 @@ function App() {
         {error && <div className="error-message" role="alert">{error}</div>}
         {canCreate && (
           <Card className="project-card">
-            <CardHeader><CardTitle>Add a project</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{editingProjectId === null ? 'Add a project' : 'Edit project'}</CardTitle></CardHeader>
             <CardContent>
-              <form className="project-grid project-add" onSubmit={create}>
+              <form className="project-grid project-add" onSubmit={submitProject}>
                 <div className="form-field"><Label htmlFor="project-name">Project name</Label><Input id="project-name" required maxLength="100" pattern="[A-Za-z0-9][A-Za-z0-9._\-]*" title="Project names use letters, digits, '.', '_' and '-', and start with a letter or digit" value={name} onChange={(e) => setName(e.target.value)} placeholder="my-project"/></div>
                 <div className="form-field"><Label htmlFor="repository-url">Repository URL</Label><Input id="repository-url" required type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://github.com/org/repo.git"/></div>
                 <div className="form-field"><Label htmlFor="project-private" className="whitespace-nowrap">Private project</Label><span className="private-choice"><input id="project-private" type="checkbox" checked={priv} onChange={(e) => setPriv(e.target.checked)}/></span></div>
-                <Button type="submit" size="icon" className="h-10 w-10 justify-self-end" disabled={submitting} title="Add project" aria-label="Add project"><Plus size={16} aria-hidden="true"/></Button>
+                {editingProjectId === null ? <Button type="submit" size="icon" className="h-10 w-10 justify-self-end" disabled={submitting} title="Add project" aria-label="Add project"><Plus size={16} aria-hidden="true"/></Button> : <div className="project-form-actions"><Button type="submit" disabled={submitting}>Save</Button><Button type="button" variant="outline" disabled={submitting} onClick={cancelEdit}>Cancel</Button></div>}
               </form>
             </CardContent>
           </Card>
@@ -287,7 +320,11 @@ function App() {
                 <strong className="project-name"><a href={projectPath(project.name)} onClick={(event) => { event.preventDefault(); openProject(project.name); }}>{project.name}</a></strong>
                 <p className="project-url">{project.repositoryUrl}</p>
                 <Badge variant="outline" className="justify-self-start">{project.privateRepository ? <LockKeyhole size={12} className="text-red-600 dark:text-red-400" aria-hidden="true"/> : <LockKeyholeOpen size={12} className="text-green-600 dark:text-green-400" aria-hidden="true"/>}{project.privateRepository ? 'Private' : 'Public'}</Badge>
-                {canDelete(project) && <Button type="button" size="icon" className="h-10 w-10 justify-self-end" title="Delete project" aria-label={`Delete project ${project.name}`} onClick={() => void deleteProject(project)}><Trash2 size={16} aria-hidden="true"/></Button>}
+                <div className="project-actions">
+                  <Button type="button" size="icon" title="View build history" aria-label={`View build history for ${project.name}`} onClick={() => openProject(project.name)}><Hammer size={16} aria-hidden="true"/></Button>
+                  {canEdit(project) && <Button type="button" size="icon" disabled={submitting} title="Edit project" aria-label={`Edit project ${project.name}`} onClick={() => editProject(project)}><Pencil size={16} aria-hidden="true"/></Button>}
+                  {canDelete(project) && <Button type="button" size="icon" disabled={submitting} title="Delete project" aria-label={`Delete project ${project.name}`} onClick={() => void deleteProject(project)}><Trash2 size={16} aria-hidden="true"/></Button>}
+                </div>
               </div>
             ))}
           </CardContent>

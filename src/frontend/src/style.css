@@ -47,8 +47,9 @@ body { background: var(--body-bg); color: var(--body-text); }
 .page-container { width: min(100%, 80rem); margin: 0 auto; padding: 2rem 1.5rem 3rem; flex: 1; }
 .project-card { margin-bottom: 1.25rem; background: var(--card-bg); border: 1px solid var(--card-border); }
 /* "Add a project" and the "Repositories" rows share these columns so they line up. */
-.project-grid { display: grid; grid-template-columns: minmax(10rem, 1fr) minmax(14rem, 1.6fr) 8rem 9rem; gap: 1rem; }
+.project-grid { display: grid; grid-template-columns: minmax(10rem, 1fr) minmax(14rem, 1.6fr) 8rem minmax(9rem, auto); gap: 1rem; }
 .project-add { align-items: end; }
+.project-form-actions, .project-actions { display: flex; align-items: center; justify-content: flex-end; gap: .5rem; min-width: 0; }
 .project-form { display: grid; grid-template-columns: minmax(10rem, 1fr) minmax(14rem, 1.6fr) auto auto; align-items: end; gap: 1rem; }
 .form-field { display: grid; gap: .6rem; min-width: 0; }
 .private-choice { display: inline-flex; align-items: center; min-height: 2.5rem; }
@@ -113,8 +114,8 @@ body { background: var(--body-bg); color: var(--body-text); }
 .stats-grid .stat-card { margin-bottom: 0; }
 .stat-label { display: inline-flex; align-items: center; gap: .4rem; }
 .stat-value { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
-@media (max-width: 800px) { .project-form, .project-grid { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 520px) { .app-header { align-items: flex-start; } .header-actions { margin-left: auto; } .project-form, .project-grid, .stats-grid { grid-template-columns: 1fr; } .page-container { padding: 1.5rem 1rem 2rem; } }
+@media (max-width: 800px) { .project-form, .project-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+@media (max-width: 520px) { .app-header { align-items: flex-start; } .header-actions { margin-left: auto; } .project-form, .project-grid, .stats-grid { grid-template-columns: minmax(0, 1fr); } .page-container { padding: 1.5rem 1rem 2rem; } }
 
 .branding-form { display: grid; gap: 1.3rem; max-width: 48rem; }
 .color-fields { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 1rem; }
