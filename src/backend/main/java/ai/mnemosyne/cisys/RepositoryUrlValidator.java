@@ -22,21 +22,23 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
  */
 @ApplicationScoped
 public class RepositoryUrlValidator {
-    private final HostResolver resolver;
-    private final Set<String> allowedHosts;
-    private final List<RepositoryUrls.Cidr> allowedNetworks;
+  private final HostResolver resolver;
+  private final Set<String> allowedHosts;
+  private final List<RepositoryUrls.Cidr> allowedNetworks;
 
-    @Inject
-    public RepositoryUrlValidator(HostResolver resolver,
-            @ConfigProperty(name = "cisys.git.allowed-hosts", defaultValue = "github.com,gitlab.com") String allowedHosts,
-            @ConfigProperty(name = "cisys.git.allowed-networks") Optional<String> allowedNetworks) {
-        this.resolver = resolver;
-        this.allowedHosts = RepositoryUrls.parseHosts(allowedHosts);
-        this.allowedNetworks = RepositoryUrls.parseNetworks(allowedNetworks.orElse(""));
-    }
+  @Inject
+  public RepositoryUrlValidator(
+      HostResolver resolver,
+      @ConfigProperty(name = "cisys.git.allowed-hosts", defaultValue = "github.com,gitlab.com")
+          String allowedHosts,
+      @ConfigProperty(name = "cisys.git.allowed-networks") Optional<String> allowedNetworks) {
+    this.resolver = resolver;
+    this.allowedHosts = RepositoryUrls.parseHosts(allowedHosts);
+    this.allowedNetworks = RepositoryUrls.parseNetworks(allowedNetworks.orElse(""));
+  }
 
-    /** Throws {@link IllegalArgumentException} with a message safe to show to the caller. */
-    public void validate(String repositoryUrl) {
-        RepositoryUrls.validate(repositoryUrl, allowedHosts, allowedNetworks, resolver);
-    }
+  /** Throws {@link IllegalArgumentException} with a message safe to show to the caller. */
+  public void validate(String repositoryUrl) {
+    RepositoryUrls.validate(repositoryUrl, allowedHosts, allowedNetworks, resolver);
+  }
 }

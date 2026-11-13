@@ -19,7 +19,13 @@ export default defineConfig(
     ignores: ["dist/**", "node_modules/**"],
   },
   js.configs.recommended,
-  { files: ["src/**/*.{js,jsx,ts,tsx}"], languageOptions: { globals: globals.browser, parserOptions: { ecmaFeatures: { jsx: true } } } },
+  {
+    files: ["src/**/*.{js,jsx,ts,tsx}"],
+    languageOptions: {
+      globals: globals.browser,
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+  },
   ...tseslint.configs.recommended,
   {
     files: ["**/*.{ts,tsx,jsx}"],
@@ -39,4 +45,3 @@ export default defineConfig(
   },
   prettierConfig,
 );
-

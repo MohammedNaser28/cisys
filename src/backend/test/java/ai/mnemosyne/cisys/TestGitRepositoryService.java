@@ -10,25 +10,29 @@ package ai.mnemosyne.cisys;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Alternative;
-import org.eclipse.jgit.api.errors.GitAPIException;
-
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.eclipse.jgit.api.errors.GitAPIException;
 
 /** Replaces the real network lookup in {@link BranchResourceTest}. */
 @Alternative
 @ApplicationScoped
 public class TestGitRepositoryService extends GitRepositoryService {
-    private static final AtomicInteger CALLS = new AtomicInteger();
+  private static final AtomicInteger CALLS = new AtomicInteger();
 
-    static void resetCalls() { CALLS.set(0); }
-    static int calls() { return CALLS.get(); }
+  static void resetCalls() {
+    CALLS.set(0);
+  }
 
-    @Override
-    protected Collection<String> remoteBranchRefs(String repositoryUrl) throws GitAPIException {
-        CALLS.incrementAndGet();
-        if (repositoryUrl.contains("unreachable")) throw new GitAPIException("unreachable") {};
-        return List.of("refs/heads/main", "refs/heads/dev", "refs/tags/v1", "refs/heads/dev");
-    }
+  static int calls() {
+    return CALLS.get();
+  }
+
+  @Override
+  protected Collection<String> remoteBranchRefs(String repositoryUrl) throws GitAPIException {
+    CALLS.incrementAndGet();
+    if (repositoryUrl.contains("unreachable")) throw new GitAPIException("unreachable") {};
+    return List.of("refs/heads/main", "refs/heads/dev", "refs/tags/v1", "refs/heads/dev");
+  }
 }

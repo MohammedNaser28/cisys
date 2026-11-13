@@ -417,11 +417,7 @@ export function ArrayValue({ value, options }: ArrayValueProps) {
 
 interface RenderFormattedValueParams {
   value:
-    | string
-    | number
-    | boolean
-    | null
-    | (string | number | boolean | null)[];
+    string | number | boolean | null | (string | number | boolean | null)[];
   column: { format?: FormatConfig };
   row?: Record<
     string,

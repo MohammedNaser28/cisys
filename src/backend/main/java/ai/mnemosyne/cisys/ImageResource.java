@@ -17,78 +17,129 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.util.*;
 
-@Path("/api/images") @Produces(MediaType.APPLICATION_JSON) @Consumes(MediaType.APPLICATION_JSON)
+@Path("/api/images")
+@Produces(MediaType.APPLICATION_JSON)
+@Consumes(MediaType.APPLICATION_JSON)
 @Authenticated
 public class ImageResource {
-    @Inject SecurityIdentity identity;
-    @Inject BuildRunner runner;
+  @Inject SecurityIdentity identity;
+  @Inject BuildRunner runner;
 
-    public record Selection(List<String> images) {}
-    public record Pull(String name) {}
-    public record LocalImage(String name, String id, String size, String created, boolean allowed) {}
+  public record Selection(List<String> images) {}
 
-    /** The images allowed for builds, for the build form. */
-    @GET public List<String> allowed() {
-        if (!(identity.hasRole("member") || identity.hasRole("lead") || identity.hasRole("admin"))) throw new ForbiddenException();
-        return names();
-    }
+  public record Pull(String name) {}
 
-    /** The images present in the local container runtime, marked with whether each is allowed. */
-    @GET @Path("/local") public List<LocalImage> local() {
-        requireAdmin();
-        Set<String> allowed = new HashSet<>(names());
-        List<BuildRunner.LocalImage> local;
-        try { local = runner.images(); }
-        catch (Exception e) { throw failure(unreachable()); }
-        return local.stream().map(i -> new LocalImage(i.name(), i.id(), i.size(), i.created(), allowed.contains(i.name()))).toList();
-    }
+  public record LocalImage(String name, String id, String size, String created, boolean allowed) {}
 
-    /** Pulls an image into the local container runtime. */
-    @POST @Path("/local") public List<LocalImage> pull(Pull input) {
-        requireAdmin();
-        String name = validName(input == null ? null : input.name());
-        Optional<String> failed;
-        try { failed = runner.pull(name); } catch (Exception e) { throw failure(unreachable()); }
-        if (failed.isPresent()) throw failure("Unable to pull " + name + ": " + failed.get());
-        return local();
-    }
+  /** The images allowed for builds, for the build form. */
+  @GET
+  public List<String> allowed() {
+    if (!(identity.hasRole("member") || identity.hasRole("lead") || identity.hasRole("admin")))
+      throw new ForbiddenException();
+    return names();
+  }
 
-    /** Removes an image from the local container runtime, and from the allowed images. */
-    @DELETE @Path("/local") public List<LocalImage> remove(@QueryParam("name") String name) {
-        requireAdmin();
-        validName(name);
-        Optional<String> failed;
-        try { failed = runner.remove(name); } catch (Exception e) { throw failure(unreachable()); }
-        if (failed.isPresent()) throw failure("Unable to remove " + name + ": " + failed.get());
-        io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> AllowedImage.deleteById(name));
-        return local();
+  /** The images present in the local container runtime, marked with whether each is allowed. */
+  @GET
+  @Path("/local")
+  public List<LocalImage> local() {
+    requireAdmin();
+    Set<String> allowed = new HashSet<>(names());
+    List<BuildRunner.LocalImage> local;
+    try {
+      local = runner.images();
+    } catch (Exception e) {
+      throw failure(unreachable());
     }
+    return local.stream()
+        .map(i ->
+            new LocalImage(i.name(), i.id(), i.size(), i.created(), allowed.contains(i.name())))
+        .toList();
+  }
 
-    /** Replaces the set of allowed images. */
-    @PUT @Transactional public List<String> update(Selection input) {
-        requireAdmin();
-        if (input == null || input.images() == null || input.images().size() > 500) throw new BadRequestException("A list of images is required");
-        Set<String> wanted = new TreeSet<>();
-        for (String name : input.images()) wanted.add(validName(name));
-        AllowedImage.delete("name not in ?1", wanted.isEmpty() ? Set.of("") : wanted);
-        for (String name : wanted) {
-            if (AllowedImage.findById(name) == null) { AllowedImage image = new AllowedImage(); image.name = name; image.persist(); }
-        }
-        return names();
+  /** Pulls an image into the local container runtime. */
+  @POST
+  @Path("/local")
+  public List<LocalImage> pull(Pull input) {
+    requireAdmin();
+    String name = validName(input == null ? null : input.name());
+    Optional<String> failed;
+    try {
+      failed = runner.pull(name);
+    } catch (Exception e) {
+      throw failure(unreachable());
     }
+    if (failed.isPresent()) throw failure("Unable to pull " + name + ": " + failed.get());
+    return local();
+  }
 
-    private String unreachable() {
-        return "Unable to run '" + runner.runtime() + "' on the backend host. Install podman or docker.";
+  /** Removes an image from the local container runtime, and from the allowed images. */
+  @DELETE
+  @Path("/local")
+  public List<LocalImage> remove(@QueryParam("name") String name) {
+    requireAdmin();
+    validName(name);
+    Optional<String> failed;
+    try {
+      failed = runner.remove(name);
+    } catch (Exception e) {
+      throw failure(unreachable());
     }
-    private void requireAdmin() { if (!identity.hasRole("admin")) throw new ForbiddenException(); }
-    private static String validName(String name) {
-        if (name == null || !name.matches(AllowedImage.PATTERN)) throw new WebApplicationException(Response.status(400).type(MediaType.APPLICATION_JSON).entity(Map.of("error", "Invalid image name")).build());
-        return name;
+    if (failed.isPresent()) throw failure("Unable to remove " + name + ": " + failed.get());
+    io.quarkus.narayana.jta.QuarkusTransaction.requiringNew()
+        .run(() -> AllowedImage.deleteById(name));
+    return local();
+  }
+
+  /** Replaces the set of allowed images. */
+  @PUT
+  @Transactional
+  public List<String> update(Selection input) {
+    requireAdmin();
+    if (input == null || input.images() == null || input.images().size() > 500)
+      throw new BadRequestException("A list of images is required");
+    Set<String> wanted = new TreeSet<>();
+    for (String name : input.images()) wanted.add(validName(name));
+    AllowedImage.delete("name not in ?1", wanted.isEmpty() ? Set.of("") : wanted);
+    for (String name : wanted) {
+      if (AllowedImage.findById(name) == null) {
+        AllowedImage image = new AllowedImage();
+        image.name = name;
+        image.persist();
+      }
     }
-    private static WebApplicationException failure(String message) {
-        return new WebApplicationException(Response.status(502).type(MediaType.APPLICATION_JSON).entity(Map.of("error", message)).build());
-    }
-    private static List<String> names() {
-        return AllowedImage.<AllowedImage>listAll().stream().map(i -> i.name).sorted().toList();
-    }
+    return names();
+  }
+
+  private String unreachable() {
+    return "Unable to run '"
+        + runner.runtime()
+        + "' on the backend host. Install podman or docker.";
+  }
+
+  private void requireAdmin() {
+    if (!identity.hasRole("admin")) throw new ForbiddenException();
+  }
+
+  private static String validName(String name) {
+    if (name == null || !name.matches(AllowedImage.PATTERN))
+      throw new WebApplicationException(
+          Response.status(400)
+              .type(MediaType.APPLICATION_JSON)
+              .entity(Map.of("error", "Invalid image name"))
+              .build());
+    return name;
+  }
+
+  private static WebApplicationException failure(String message) {
+    return new WebApplicationException(
+        Response.status(502)
+            .type(MediaType.APPLICATION_JSON)
+            .entity(Map.of("error", message))
+            .build());
+  }
+
+  private static List<String> names() {
+    return AllowedImage.<AllowedImage>listAll().stream().map(i -> i.name).sorted().toList();
+  }
 }

@@ -9,12 +9,11 @@
 package ai.mnemosyne.cisys;
 
 import io.quarkus.test.junit.QuarkusTestProfile;
-
 import java.util.Set;
 
 public class BranchTestProfile implements QuarkusTestProfile {
-    @Override
-    public Set<Class<?>> getEnabledAlternatives() {
-        return Set.of(TestGitRepositoryService.class);
-    }
+  @Override
+  public Set<Class<?>> getEnabledAlternatives() {
+    return Set.of(TestGitRepositoryService.class);
+  }
 }

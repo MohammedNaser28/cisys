@@ -13,5 +13,5 @@ import java.net.UnknownHostException;
 
 /** Resolves a host name to every address it has. Replaced in tests so they never use DNS. */
 public interface HostResolver {
-    InetAddress[] resolve(String host) throws UnknownHostException;
+  InetAddress[] resolve(String host) throws UnknownHostException;
 }

@@ -185,9 +185,12 @@ The targets are
 * `clean` - Clean
 * `lint` - Run the frontend ESLint check
 * `check` - Run the frontend checks (lint and build), as CI does
+* `format` - Format the backend and the whole `src/frontend` folder (Prettier)
+* `format-check` - Check formatting of all files without changing them, as CI does
+* `checkstyle` - Run the minimal Checkstyle rules (see `checkstyle.xml`)
 * `build` - Build the frontend
 * `run` - Run the backend and the frontend in development mode
-* `test` - Run the frontend lint and the backend test cases
+* `test` - Run the frontend lint, the formatting and Checkstyle checks and the backend test cases
 * `docs` - Generate the manual
 * `platform-start` - Start compose services (PostgreSQL + Keycloak)
 * `platform-stop` - Stop the compose services

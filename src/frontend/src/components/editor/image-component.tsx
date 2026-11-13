@@ -36,8 +36,7 @@ import {
 } from "lexical";
 
 type ImageStatus =
-  | { error: true }
-  | { error: false; width: number; height: number };
+  { error: true } | { error: false; width: number; height: number };
 
 const imageCache = new Map<string, Promise<ImageStatus> | ImageStatus>();
 

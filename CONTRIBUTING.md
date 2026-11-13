@@ -142,4 +142,4 @@ In your first pull request you need to add yourself to the `AUTHORS` file.
 
 ## Code Style
 
-Please, follow the coding style of the project. The frontend is checked with ESLint (`npm run lint` in `src/frontend`), which also runs as a Husky `pre-commit` hook on staged files. Run the full lint and the tests with `make test`.
+Please, follow the coding style of the project. Format with `make format` before committing; CI checks formatting of all files. Java is formatted with [google-java-format](https://github.com/google/google-java-format) (2-space indent, Spotless) and is additionally checked with Checkstyle (`make checkstyle`, rules in `checkstyle.xml`). The frontend is formatted with Prettier (the whole `src/frontend` folder) and checked with ESLint (`npm run lint` in `src/frontend`), which also runs as a Husky `pre-commit` hook on staged files. Run the frontend lint, the formatting and Checkstyle checks and the backend test cases with `make test`.

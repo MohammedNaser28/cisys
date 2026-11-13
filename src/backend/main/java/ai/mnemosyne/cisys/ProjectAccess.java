@@ -16,24 +16,31 @@ import java.util.Locale;
 import org.eclipse.microprofile.jwt.JsonWebToken;
 
 /**
- * Visibility rules shared by project pages, their builds, logs and branches.
- * Private projects are only readable by their owner and admins; everyone else gets a 404,
- * so the existence of a private project is not revealed.
+ * Visibility rules shared by project pages, their builds, logs and branches. Private projects are
+ * only readable by their owner and admins; everyone else gets a 404, so the existence of a private
+ * project is not revealed.
  */
 @ApplicationScoped
 public class ProjectAccess {
-    @Inject SecurityIdentity identity;
+  @Inject SecurityIdentity identity;
 
-    public Project visible(String name) {
-        Project p = Project.<Project>find("lower(name) = ?1", name.trim().toLowerCase(Locale.ROOT)).firstResult();
-        if (p == null || (p.privateRepository && !canSeePrivate(p))) throw new NotFoundException();
-        return p;
-    }
+  public Project visible(String name) {
+    Project p =
+        Project.<Project>find("lower(name) = ?1", name.trim().toLowerCase(Locale.ROOT))
+            .firstResult();
+    if (p == null || (p.privateRepository && !canSeePrivate(p))) throw new NotFoundException();
+    return p;
+  }
 
-    /** Same rule as the authenticated project and build endpoints: a Cisys role, and admin or owner. */
-    boolean canSeePrivate(Project p) {
-        if (identity.isAnonymous() || !(identity.getPrincipal() instanceof JsonWebToken jwt) || jwt.getSubject() == null) return false;
-        if (!(identity.hasRole("member") || identity.hasRole("lead") || identity.hasRole("admin"))) return false;
-        return identity.hasRole("admin") || jwt.getSubject().equals(p.ownerSubject);
-    }
+  /**
+   * Same rule as the authenticated project and build endpoints: a Cisys role, and admin or owner.
+   */
+  boolean canSeePrivate(Project p) {
+    if (identity.isAnonymous()
+        || !(identity.getPrincipal() instanceof JsonWebToken jwt)
+        || jwt.getSubject() == null) return false;
+    if (!(identity.hasRole("member") || identity.hasRole("lead") || identity.hasRole("admin")))
+      return false;
+    return identity.hasRole("admin") || jwt.getSubject().equals(p.ownerSubject);
+  }
 }

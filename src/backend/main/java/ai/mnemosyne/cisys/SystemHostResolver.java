@@ -15,8 +15,8 @@ import java.net.UnknownHostException;
 /** The default resolver: the JVM's own name lookup. */
 @ApplicationScoped
 public class SystemHostResolver implements HostResolver {
-    @Override
-    public InetAddress[] resolve(String host) throws UnknownHostException {
-        return InetAddress.getAllByName(host);
-    }
+  @Override
+  public InetAddress[] resolve(String host) throws UnknownHostException {
+    return InetAddress.getAllByName(host);
+  }
 }

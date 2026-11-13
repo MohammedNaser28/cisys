@@ -1,4 +1,4 @@
-.PHONY: all clean run test lint check build docs platform-start platform-stop reset frontend setup full
+.PHONY: all clean run test lint check build docs platform-start platform-stop reset frontend format format-check checkstyle setup full
 
 all: clean lint run
 
@@ -18,6 +18,18 @@ lint: frontend
 check: frontend
 	@npm --prefix src/frontend run check
 
+# Reformats Java (google-java-format) and the frontend (Prettier).
+format: frontend
+	@mvn -B spotless:apply && npm --prefix src/frontend run format
+
+# Checks formatting of Java and the frontend; makes no changes, as CI does.
+format-check: frontend
+	@mvn -B spotless:check && npm --prefix src/frontend run format:check
+
+# Runs the minimal Checkstyle rules (see checkstyle.xml).
+checkstyle:
+	@mvn -B checkstyle:check
+
 build: frontend
 	@npm --prefix src/frontend run build
 
@@ -36,7 +48,7 @@ run: frontend
 	trap 'kill $$frontend_pid $$backend_pid 2>/dev/null; wait' EXIT INT TERM; \
 	wait $$backend_pid
 
-test: lint
+test: lint format-check checkstyle
 	@mvn test
 
 docs:

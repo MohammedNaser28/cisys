@@ -23,37 +23,38 @@ import java.util.Map;
 
 /**
  * Applies {@link PublicRateLimiter} to the endpoints marked with {@link PublicRateLimited}.
- * Signed-in callers are never counted, so the authenticated build pages keep working during a
- * burst of anonymous traffic. The client is identified by the socket address; behind a reverse
- * proxy configure Quarkus to use the forwarded address, otherwise every visitor shares one bucket.
+ * Signed-in callers are never counted, so the authenticated build pages keep working during a burst
+ * of anonymous traffic. The client is identified by the socket address; behind a reverse proxy
+ * configure Quarkus to use the forwarded address, otherwise every visitor shares one bucket.
  */
 @Provider
 @PublicRateLimited
 @Priority(Priorities.AUTHORIZATION)
 public class PublicRateLimitFilter implements ContainerRequestFilter {
-    @Inject SecurityIdentity identity;
-    @Inject PublicRateLimiter limiter;
-    @Context HttpServerRequest request;
+  @Inject SecurityIdentity identity;
+  @Inject PublicRateLimiter limiter;
+  @Context HttpServerRequest request;
 
-    @Override
-    public void filter(ContainerRequestContext context) {
-        // CORS preflight requests are cheap and must not consume a visitor's budget.
-        if (context.getMethod().equals("OPTIONS")) return;
-        if (!identity.isAnonymous()) return;
-        long retryAfter = limiter.acquire(clientAddress(), System.currentTimeMillis());
-        if (retryAfter == 0) return;
-        context.abortWith(Response.status(429)
-                .type(MediaType.APPLICATION_JSON)
-                .header("Retry-After", retryAfter)
-                .entity(Map.of("error", "Too many requests. Try again later."))
-                .build());
-    }
+  @Override
+  public void filter(ContainerRequestContext context) {
+    // CORS preflight requests are cheap and must not consume a visitor's budget.
+    if (context.getMethod().equals("OPTIONS")) return;
+    if (!identity.isAnonymous()) return;
+    long retryAfter = limiter.acquire(clientAddress(), System.currentTimeMillis());
+    if (retryAfter == 0) return;
+    context.abortWith(
+        Response.status(429)
+            .type(MediaType.APPLICATION_JSON)
+            .header("Retry-After", retryAfter)
+            .entity(Map.of("error", "Too many requests. Try again later."))
+            .build());
+  }
 
-    private String clientAddress() {
-        try {
-            return request.remoteAddress() == null ? "unknown" : request.remoteAddress().hostAddress();
-        } catch (RuntimeException e) {
-            return "unknown";
-        }
+  private String clientAddress() {
+    try {
+      return request.remoteAddress() == null ? "unknown" : request.remoteAddress().hostAddress();
+    } catch (RuntimeException e) {
+      return "unknown";
     }
+  }
 }
