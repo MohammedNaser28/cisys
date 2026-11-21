@@ -59,6 +59,7 @@ public class BuildRunner {
   @Inject BuildLogs logs;
   @Inject RepositoryUrlValidator repositoryUrls;
   @Inject RepositoryMirror mirrors;
+  @Inject ProjectCredentials projectCredentials;
 
   @Inject ProjectCache caches;
 
@@ -986,7 +987,11 @@ public class BuildRunner {
         b.id,
         b.repositoryUrl,
         b.branch,
-        pullRequest ? null : b.credentialRef,
+        () -> {
+          Project project =
+              QuarkusTransaction.requiringNew().call(() -> Project.<Project>findById(b.projectId));
+          return tokenFor(b, project);
+        },
         b.revision,
         mirrorFor(b),
         pullRequest,
@@ -1023,6 +1028,18 @@ public class BuildRunner {
     } finally {
       lock.unlock();
     }
+  }
+
+  /**
+   * The token a build fetches with. A pull request build never gets one. Otherwise a queued team
+   * reference is resolved only against the same team and repository URL; rotating the token applies
+   * to queued builds, but a team change fails the build before credentials are used.
+   */
+  String tokenFor(Build b, Project project) {
+    if (b.trigger == Build.Trigger.PULL_REQUEST || project == null) {
+      return null;
+    }
+    return projectCredentials.token(project, b.credentialRef, b.repositoryUrl);
   }
 
   @Inject HostResolver resolver;
@@ -1145,7 +1162,7 @@ public class BuildRunner {
       Path workspace,
       String url,
       String branch,
-      String credentialRef,
+      String token,
       String expectedRevision,
       Path localMirror,
       int maxCheckoutMib,
@@ -1156,7 +1173,7 @@ public class BuildRunner {
         workspace,
         url,
         branch,
-        credentialRef,
+        token,
         expectedRevision,
         localMirror,
         maxCheckoutMib,
@@ -1173,7 +1190,7 @@ public class BuildRunner {
       Path workspace,
       String url,
       String branch,
-      String credentialRef,
+      String token,
       String expectedRevision,
       Path localMirror,
       int maxCheckoutMib,
@@ -1196,11 +1213,7 @@ public class BuildRunner {
       // Checked again here because DNS can change after the project was saved.
       cloneUrl = RepositoryUrls.cloneUrl(url);
       repositoryUrls.validate(cloneUrl);
-      if (credentialRef != null) {
-        String token = System.getenv(credentialRef);
-        if (token == null || token.isBlank()) {
-          throw new IllegalStateException("Missing Git credential");
-        }
+      if (token != null) {
         credentials = new UsernamePasswordCredentialsProvider("oauth2", token);
       }
     }
@@ -1220,7 +1233,7 @@ public class BuildRunner {
       Long id,
       String url,
       String branch,
-      String credentialRef,
+      java.util.function.Supplier<String> tokenSupplier,
       String expectedRevision,
       Path localMirror,
       boolean requireLocalMirror,
@@ -1242,6 +1255,8 @@ public class BuildRunner {
     running.put(id, handle);
     try {
       log = logs.open(id);
+      // Resolved on the build thread so a missing or undecryptable credential fails this build.
+      String token = tokenSupplier.get();
       int[] limits =
           QuarkusTransaction.requiringNew()
               .call(() ->
@@ -1262,7 +1277,7 @@ public class BuildRunner {
               workspace,
               url,
               branch,
-              credentialRef,
+              token,
               expectedRevision,
               localMirror,
               limits[0],

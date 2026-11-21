@@ -27,6 +27,9 @@ public class Project extends PanacheEntity {
   @Column(nullable = false, length = 255)
   public String ownerSubject;
 
+  /** The team that supplies access and, when configured, the repository token for this project. */
+  public Long teamId;
+
   /** The environment variable that holds a read-only token for a private repository. */
   @Column(length = 100)
   public String credentialRef;

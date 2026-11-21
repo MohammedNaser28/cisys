@@ -123,4 +123,21 @@ describe("ProjectPicker", () => {
     renderPicker({ initial: [1, 2, 3, 4] });
     expect(screen.getByText("All 4 projects")).toBeTruthy();
   });
+
+  it("marks selected options in the list", () => {
+    renderPicker({ initial: [2] });
+    open();
+    expect(
+      screen
+        .getByLabelText("beta")
+        .closest(".project-picker-option")
+        .getAttribute("data-selected"),
+    ).toBe("true");
+    expect(
+      screen
+        .getByLabelText("alpha")
+        .closest(".project-picker-option")
+        .getAttribute("data-selected"),
+    ).toBe("false");
+  });
 });

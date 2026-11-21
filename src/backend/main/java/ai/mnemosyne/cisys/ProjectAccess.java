@@ -53,6 +53,16 @@ public class ProjectAccess {
     return p;
   }
 
+  /** The team with {@code id}; 404 when missing or invisible to the caller. */
+  public Team visibleTeam(Long id) {
+    requireCisysRole();
+    Team team = Team.findById(id);
+    if (team == null || (!isAdmin() && TeamMember.roleOf(id, subject()) == null)) {
+      throw new NotFoundException();
+    }
+    return team;
+  }
+
   /** The projects the caller may see: everything for admins, public and assigned otherwise. */
   public List<Project> listVisible() {
     requireCisysRole();
@@ -60,7 +70,10 @@ public class ProjectAccess {
       return Project.listAll();
     }
     return Project.list(
-        "privateRepository = false or id in (select m.projectId from ProjectMember m where m.subject = ?1)",
+        "privateRepository = false"
+            + " or id in (select m.projectId from ProjectMember m where m.subject = ?1)"
+            + " or teamId in (select tm.teamId from TeamMember tm where tm.subject = ?2)",
+        subject(),
         subject());
   }
 
@@ -68,7 +81,7 @@ public class ProjectAccess {
     return identity.hasRole("admin");
   }
 
-  /** Whether the caller holds any membership row in the project, of any role. */
+  /** Whether the caller has any effective membership, directly or through its project team. */
   public boolean isMember(Project p) {
     return memberRole(p) != null;
   }
@@ -78,7 +91,7 @@ public class ProjectAccess {
     if (sub == null || p == null) {
       return null;
     }
-    return ProjectMember.roleOf(p.id, sub);
+    return ProjectRoles.of(p.id, sub);
   }
 
   /** True when the caller holds the given project role or a higher one, or is a global admin. */
@@ -87,11 +100,7 @@ public class ProjectAccess {
       return true;
     }
     TeamRole have = memberRole(p);
-    return have != null && level(have) >= level(required);
-  }
-
-  private static int level(TeamRole role) {
-    return role == TeamRole.LEAD ? 2 : 1;
+    return have != null && ProjectRoles.level(have) >= ProjectRoles.level(required);
   }
 
   /** True when the caller should see the {@link TeamRole}-or-higher view of the project. */
@@ -108,12 +117,7 @@ public class ProjectAccess {
 
   /** The projects with any membership role are visible; private projects need it. */
   boolean canView(Project p) {
-    if (!p.privateRepository || canSeePrivate(p)) {
-      return true;
-    }
-    return hasCisysRole()
-        && identity.getPrincipal() instanceof JsonWebToken jwt
-        && ProjectMember.isMember(p.id, jwt.getSubject());
+    return !p.privateRepository || canSeePrivate(p);
   }
 
   /**

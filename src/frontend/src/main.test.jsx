@@ -119,6 +119,7 @@ function fetchResponse(input) {
   if (url.pathname === "/api/session")
     return json({ username: "lead", subject: "lead", roles: ["lead"] });
   if (url.pathname === "/api/projects") return json([project]);
+  if (url.pathname === "/api/teams") return json([]);
   if (url.pathname === "/api/projects/1/team")
     return json([{ username: "lead", role: "LEAD" }]);
   if (url.pathname === "/api/project-pages/demo/branches")
@@ -258,6 +259,67 @@ describe("project tab routing", () => {
     expect(window.location.search).toBe("");
     expect(activeTab("Builds")).toBe("active");
     expect(commitCalls()).toHaveLength(0);
+  });
+});
+
+describe("team-only navigation", () => {
+  it("shows Teams instead of Users to a team LEAD without a global lead role", async () => {
+    keycloakMock.init.mockResolvedValue(true);
+    fetchMock.mockImplementation((input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/session")
+        return json({ username: "team", subject: "team", roles: ["member"] });
+      if (url.pathname === "/api/teams")
+        return json([
+          {
+            id: 3,
+            name: "Build team",
+            role: "LEAD",
+            projectCount: 0,
+            memberCount: 1,
+            tokenSet: false,
+          },
+        ]);
+      return fetchResponse(input);
+    });
+    render(<App />);
+
+    const teams = await screen.findByRole("button", { name: "Teams" }, FIND);
+    expect(screen.queryByRole("button", { name: "Users" })).toBeNull();
+    fireEvent.click(teams);
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Teams" }, FIND),
+    ).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "Users" })).toBeNull();
+  });
+
+  it("redirects a member with no LEAD team away from the Users route", async () => {
+    keycloakMock.init.mockResolvedValue(true);
+    goTo("/users");
+    fetchMock.mockImplementation((input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/session")
+        return json({
+          username: "member",
+          subject: "member",
+          roles: ["member"],
+        });
+      if (url.pathname === "/api/teams")
+        return json([
+          {
+            id: 3,
+            name: "Build team",
+            role: "MEMBER",
+            projectCount: 0,
+            memberCount: 1,
+            tokenSet: false,
+          },
+        ]);
+      return fetchResponse(input);
+    });
+    render(<App />);
+
+    await waitFor(() => expect(window.location.pathname).toBe("/home"), FIND);
   });
 });
 

@@ -45,7 +45,7 @@ const EMPTY = {
   projectIds: [],
 };
 
-export default function UsersPanel({ api, user }) {
+export default function UsersPanel({ api, user, tabs }) {
   const admin = user.roles.includes("admin");
   const [page, setPage] = useState(null);
   const [projects, setProjects] = useState([]);
@@ -156,6 +156,7 @@ export default function UsersPanel({ api, user }) {
           </Badge>
         }
       />
+      {tabs}
       {error && (
         <div className="error-message" role="alert">
           {error}

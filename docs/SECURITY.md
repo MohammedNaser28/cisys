@@ -21,21 +21,21 @@ The Keycloak admin console (<http://localhost:8180/admin>) uses `admin` / `admin
 | Endpoint                                  | Member                    | Lead                 | Admin |
 | :---------------------------------------- | :------------------------ | :------------------- | :---- |
 | `GET /api/session`                        | yes                       | yes                  | yes   |
-| `GET /api/projects`                       | public and assigned       | public, own and assigned | all |
+| `GET /api/projects`                       | public and direct-or-team effective access | public, own and direct-or-team effective access | all |
 | `POST /api/projects`                      | no                        | yes                  | yes   |
 | `GET /api/projects/{id}/builds[/{id}]`    | visible projects          | visible projects     | all   |
 | `GET /api/projects/{id}/branches`         | visible projects          | visible projects     | all   |
-| `POST /api/projects/{id}/builds`          | no                        | yes                  | yes   |
-| `POST .../builds/{id}/rerun`              | assigned projects         | assigned projects    | yes   |
+| `POST /api/projects/{id}/builds`          | direct-or-team project member | direct-or-team project member | yes |
+| `POST .../builds/{id}/rerun`              | direct-or-team projects | direct-or-team projects | yes   |
 | `POST` build with a `credentialRef`       | no                        | no                   | yes   |
-| `PUT`/`DELETE .../builds/{id}/pin`        | no                        | own projects         | yes   |
-| `POST .../builds/{id}/comments`           | assigned projects         | assigned projects    | yes   |
+| `PUT`/`DELETE .../builds/{id}/pin`        | no                        | project LEAD         | yes   |
+| `POST .../builds/{id}/comments`           | direct-or-team projects | direct-or-team projects | yes   |
 | `PUT .../builds/{id}/comments/{id}`       | own, in assigned projects | own, in assigned projects | own comments |
 | `DELETE .../builds/{id}/comments/{id}`    | own, in assigned projects | own; any in own projects | yes |
 | `POST /api/articles`, `PUT`/`DELETE /api/articles/{id}` | when General allows members | when General allows leads | yes |
-| `GET /api/projects/{id}/team`             | assigned members          | assigned members     | all   |
-| `POST /api/projects/{id}/team`            | no                        | assigned (`LEAD`)    | yes   |
-| `PUT`/`DELETE /api/projects/{id}/team/{username}` | no                        | assigned (`LEAD`)    | yes   |
+| `GET /api/projects/{id}/team`             | direct-or-team members | direct-or-team members | all   |
+| `POST /api/projects/{id}/team`            | no                        | effective project (`LEAD`) | yes   |
+| `PUT`/`DELETE /api/projects/{id}/team/{username}` | no                        | effective project (`LEAD`) | yes   |
 | `GET /api/branding`                       | yes                       | yes                  | yes   |
 | `PUT /api/branding`                       | no                        | no                   | yes   |
 | `GET`/`PUT /api/settings/general`         | no                        | no                   | yes   |
@@ -55,10 +55,22 @@ The Keycloak admin console (<http://localhost:8180/admin>) uses `admin` / `admin
 | `DELETE /api/users/{id}`                  | no                        | no                   | yes, not themselves |
 | `GET /api/audit`, `GET /api/audit/{id}`   | no                        | no                   | yes |
 | `GET /api/reports/builds/trends`          | no                        | led projects         | all |
+| `GET /api/teams`                          | team member              | team member or global lead | yes |
+| `POST /api/teams`                         | no                       | yes                  | yes |
+| `PUT /api/teams/{id}`                     | team LEAD                | team LEAD            | yes |
+| `DELETE /api/teams/{id}`                  | team LEAD                | team LEAD            | yes |
+| `GET /api/teams/{id}/members`             | team member              | team member          | yes |
+| `POST /api/teams/{id}/members`            | no                       | team LEAD            | yes |
+| `PUT`/`DELETE /api/teams/{id}/members/{username}` | no                | team LEAD            | yes |
+| `PUT`/`DELETE /api/teams/{id}/token`       | no                       | team LEAD            | yes |
+| `PUT /api/projects/{id}/team-assignment`   | no                       | creator/direct LEAD plus target-team LEAD | yes |
+| `PUT /api/projects/{id}/credential`       | no                        | no                   | yes |
 
-Without signing in, `GET /api/branding/public`, `GET /api/branding/logo`, `GET /api/stats/public`, the public project page (`GET /api/project-pages/{name}`, `GET /api/project-pages/{name}/builds/{buildId}` with its build logs and comments) `GET /api/project-pages/{name}/branches` and `GET /api/project-pages/{name}/commits` for public projects, and the articles (`GET /api/articles`, `GET /api/articles/{id}`) are readable. Build artifacts (`GET /api/project-pages/{name}/builds/{buildId}/artifacts`, `/artifacts/{artifactId}` and `/artifacts.zip`) need a signed-in caller who can see the build, also on public projects; anonymous callers receive `401`. Artifacts are always sent as attachments with `X-Content-Type-Options: nosniff` and `Content-Security-Policy: sandbox`, so a browser never renders one on this origin. The project page accepts an optional `branch` query parameter, which filters the builds but applies the same public/private visibility rules. The statistics are aggregate counts computed from public projects only (public projects, their builds by status, success rate, last build time). Private projects and their builds are left out of every number, and no names, repository URLs, logs or users are exposed. The server caches the result for `STATS_CACHE_SECONDS` (default 30) seconds. The branch endpoint returns remote branch names for public projects. For a private project with a credential reference it reads the repository as that project; without one it requires the same access as the page (project member or admin) and returns only the branches that already have builds, so the private repository is not read; anonymous callers and users without access receive `404`. The commits endpoint takes a required `branch` plus optional `skip` and `limit` parameters (default 50, maximum 100; `skip` must be between 0 and 5000), applies the same visibility rules, and returns commit metadata with the builds of each commit. It reads the project's mirror when available. When the mirror directory or branch is absent, or a private project has no credential reference, it returns only commits that already have builds and reports `HISTORY_UNAVAILABLE`; `HISTORY_LIMIT` is reported only when a commit beyond the newest 5000 exists. A genuine mirror read failure is `502`, and a busy mirror is `503` with `Retry-After`. Anonymous callers and users without access receive `404` for private projects.
+Without signing in, `GET /api/branding/public`, `GET /api/branding/logo`, `GET /api/stats/public`, the public project page (`GET /api/project-pages/{name}`, `GET /api/project-pages/{name}/builds/{buildId}` with its build logs and comments) `GET /api/project-pages/{name}/branches` and `GET /api/project-pages/{name}/commits` for public projects, and the articles (`GET /api/articles`, `GET /api/articles/{id}`) are readable. Build artifacts (`GET /api/project-pages/{name}/builds/{buildId}/artifacts`, `/artifacts/{artifactId}` and `/artifacts.zip`) need a signed-in caller who can see the build, also on public projects; anonymous callers receive `401`. Artifacts are always sent as attachments with `X-Content-Type-Options: nosniff` and `Content-Security-Policy: sandbox`, so a browser never renders one on this origin. The project page accepts an optional `branch` query parameter, which filters the builds but applies the same public/private visibility rules. The statistics are aggregate counts computed from public projects only (public projects, their builds by status, success rate, last build time). Private projects and their builds are left out of every number, and no names, repository URLs, logs or users are exposed. The server caches the result for `STATS_CACHE_SECONDS` (default 30) seconds. The branch endpoint returns remote branch names for public projects. For a private project with a configured credential it reads the repository as that project; without one it requires the same access as the page (project member or admin) and returns only the branches that already have builds, so the private repository is not read; anonymous callers and users without access receive `404`. The commits endpoint takes a required `branch` plus optional `skip` and `limit` parameters (default 50, maximum 100; `skip` must be between 0 and 5000), applies the same visibility rules, and returns commit metadata with the builds of each commit. It reads the project's mirror when available. When the mirror directory or branch is absent, or a private project has no configured credential, it returns only commits that already have builds and reports `HISTORY_UNAVAILABLE`; `HISTORY_LIMIT` is reported only when a commit beyond the newest 5000 exists. A genuine mirror read failure is `502`, and a busy mirror is `503` with `Retry-After`. Anonymous callers and users without access receive `404` for private projects.
 
-Private projects (and their build history and logs) are visible only to their members and admins. A project's leads and members are users assigned to it with roles `LEAD` and `MEMBER` respectively; the creator is automatically assigned `LEAD` when the project is created. Visibility is recorded with the immutable Keycloak subject (`sub`), not the user name. A project that is not visible to the caller is reported as `404 Not Found`.
+Private projects (and their build history and logs) are visible only to direct project members, members of the project's team, and admins. Direct project roles and team roles combine by taking the highest role. Visibility is recorded with the immutable Keycloak subject (`sub`), not the user name. A project that is not visible to the caller is reported as `404 Not Found`. Anyone who can edit the project can switch its visibility in either direction. Only private projects resolve a credential: a public project never uses its team's token, and making a project public clears its environment-variable reference.
+
+Team `MEMBER` or `LEAD` roles supply project access only when the team is assigned to that project. Team LEADs and admins manage team members and the team's token. Every team retains at least one team LEAD, including for administrators, and only an administrator can remove or demote the team creator. The team-members endpoint returns 404 to callers who are not team members.
 
 User subjects are returned to admins only:
 
@@ -120,7 +132,7 @@ The runner is always on. It lets leads and admins run code from a Git repository
 Controls that are in place
 
 * Only HTTPS repositories on an allowed host are accepted for builds and branch discovery; redirects, embedded credentials, query strings, fragments and non-default ports are rejected. See [Repository addresses](#repository-addresses).
-* Branch discovery for a private project without a credential reference is not attempted; the endpoint returns only branches that already have builds. With a credential reference it reads the repository as that project.
+* Branch discovery for a private project without a configured credential is not attempted; the endpoint returns only branches that already have builds. With a configured credential it reads the repository as that project.
 * Branch names are validated as Git references. Builds may only use images an admin has allowed; image names are validated against a restrictive pattern.
 * The branch is fetched afresh with JGit at depth 1 and its commit ID is recorded. The build then builds an image from the workflow: it installs `git`, `make`, `podman` and `podman-compose` and the workflow's `dependencies` as root, with network access, copies that checkout into the image as `65534:65534`, and runs the steps as `65534:65534` without network, except through the egress proxy (see [Network for build steps](#network-for-build-steps)). Only the installs have network access; the image build does not fetch the repository again.
 * A checkout is limited to `BUILD_MAX_CHECKOUT_MIB` (default 1024 MiB) and `BUILD_MAX_CHECKOUT_FILES` (default 100000 files); admins can change both under Settings. The received pack is capped while it is fetched, the files are measured as they will be written, after line ending conversion, before checkout, and the written working tree is measured again after checkout. A checkout over a limit fails the build with `Build failed: Repository checkout exceeds the limit of …` and its directory is removed.
@@ -175,7 +187,7 @@ Residual risk
 Known gaps
 
 * Runner and Podman operation on Windows/WSL has not been verified.
-* Credentials are not scoped to individual projects; only admins may reference one.
+* Stored tokens are scoped to teams; environment-variable references remain backend configuration and only admins may set project references.
 * DNS rebinding between the address check and JGit's own connection is not fully prevented, because JGit resolves the host again when it connects.
 
 ### Automatic builds
@@ -184,7 +196,7 @@ Automatic builds are a global, admin-only switch. A server-side timer polls each
 
 * The timer keeps one bare mirror per project under `cisys.poll.mirror-dir` (`POLL_MIRROR_DIR`), outside the temporary build area and rejected if it is under `java.io.tmpdir`; directories are owner-only where the OS supports it. It fetches all branch heads with forced refs and no automatic garbage collection, so a commit a queued build still needs stays readable even after it leaves the remote; each project's mirror has its own lock, and the URL rules above are revalidated before every fetch. The size limit is checked after the fetch completes, so one fetch can exceed it before polling stops for that project.
 * With the default settings (on, all branches whose tip has `ci.yml`, one build per commit), anyone who can push a commit to such a branch can make the backend run its container build. Treat repository write access as build-trigger access.
-* A private project without a `CISYS_GIT_*` credential reference is skipped and logged once, never polled anonymously. A project whose fetch keeps failing is logged once and retried later; one failing project never stops the tick for the others.
+* A private project with no configured credential at all (neither an environment-variable reference nor a stored token) is skipped and logged once, never polled anonymously. A project whose fetch keeps failing is logged once and retried later; one failing project never stops the tick for the others.
 * The first sighting of a branch seeds its tip without building, so enabling automatic builds never builds history, and a commit already built for the project is never queued twice, whatever branch reaches it. The last-seen commit of a branch advances only after a commit was queued or found to have been built, so a full build queue slows polling down instead of dropping commits.
 * A build whose commit is missing from the mirror fails with a clear message rather than building the branch tip. Turning automatic builds off deletes every branch cursor; mirrors are deleted only when pull request builds are also off, and a project with a queued or running poll or pull request build keeps its mirror until that build finishes.
 
@@ -204,13 +216,14 @@ Pull request and merge request builds are a separate, admin-only global switch, 
 
 ### Git credentials
 
-For private repositories set an environment variable named `CISYS_GIT_<NAME>` to a read-only provider token in the backend environment before starting it. The value is never stored in the database. Only the backend's JGit repository access uses it: branch discovery, the poller's mirror fetch, and build checkouts. The commit history endpoint reads the existing local mirror and does not resolve the credential. The image build does not receive it, so it is not in the image and steps cannot read it. Never place secrets in workflow files or build output; each build stores its workflow file.
+For private repositories, an administrator may reference an environment variable, while a team LEAD or administrator may store one encrypted token on the team. Stored tokens use AES-256-GCM, with `CISYS_SECRET_KEY` and the team id as additional authenticated data; the token is write-only and is validated with `ls-remote` through the repository URL validator, host allowlist and resolver when a private validation project is supplied. Never place secrets in workflow files or build output; each build stores its workflow file. The token is never returned, logged, put in a build row, Dockerfile or public page. A stored token that cannot be decrypted fails closed.
 
-* An admin can store the **variable name** on a private project when creating it, and change or clear it later on the project edit form (`PUT /api/projects/{id}`) or through `PUT /api/projects/{id}/credential`. Only the name is stored; it is returned to admins and left out for everyone else.
-* Branch discovery and the poller's mirror fetch use that credential. Without one, a private project keeps showing only the branches and commits that already have builds. The commits endpoint reads the local mirror and does not resolve the credential itself.
-* The credential belongs to the repository. When a lead changes the repository URL, the credential is cleared, so it is never sent to a new host. Admins may change the URL and the credential in the same request.
-* Automatic builds use the project credential. Manual builds use a per-build credential reference when an admin supplies one, otherwise the project credential; reruns use the project's current credential. The token is read from the environment when the build runs.
-* A credential cannot be set on a public project, and the name must match `CISYS_GIT_[A-Z0-9_]{1,80}`.
+* The project environment-variable reference is set by an admin through the project update endpoint. The variable name must match `CISYS_GIT_[A-Z0-9_]{1,80}`.
+* A team token is set or cleared at `PUT` or `DELETE /api/teams/{id}/token`. The token must be non-blank and at most 4096 characters, and authorization is checked before the encryption configuration, so an unauthorized caller never learns whether `CISYS_SECRET_KEY` is set. The response contains only whether it is set and its update metadata; the token itself is never returned.
+* Credential resolution is: administrator-supplied per-build reference, the project's team token, then the project's environment-variable reference. Pull request builds never receive a credential. Only private projects resolve a credential: a public project never uses its team's token, and making one public clears its environment-variable reference.
+* Branch discovery, the poller's mirror fetch, automatic builds and manual builds use the resolved project credential. Without one, a private project keeps showing only branches and commits that already have builds. The token is read when the build runs and is never stored in a build row.
+* A build queued with the `@team-secret:<teamId>` sentinel remains bound to the repository URL and team captured when it was queued; if either changes, the build fails closed rather than using another team's token. A build queued without a credential reference resolves the project's current team token while its repository URL still matches the one it was queued with, so a team change can supply a different token to that build.
+* A missing `CISYS_SECRET_KEY` makes team-token writes return `503`; a changed key makes existing stored tokens unusable until they are re-entered. There is no key rotation support.
 
 ## Public access limits
 

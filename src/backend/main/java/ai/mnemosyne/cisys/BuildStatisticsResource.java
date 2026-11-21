@@ -162,7 +162,7 @@ public class BuildStatisticsResource {
         refs, projectId, p, now, totals, byProject, byTrigger, byBranch, failures(scope, names));
   }
 
-  /** Null for admins (every project), the led projects for global leads. */
+  /** Null for admins (every project), the effectively led projects for global leads. */
   private Set<Long> allowedProjectIds() {
     if (access.isAdmin()) {
       return null;
@@ -170,7 +170,7 @@ public class BuildStatisticsResource {
     if (!identity.hasRole("lead")) {
       throw new ForbiddenException();
     }
-    return ProjectMember.projectIds(access.subject(), ProjectMember.TeamRole.LEAD);
+    return ProjectRoles.projectIds(access.subject(), ProjectMember.TeamRole.LEAD);
   }
 
   private static Instant since(String period, Instant now) {

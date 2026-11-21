@@ -115,6 +115,7 @@ export default function ProjectPicker({
                 <div
                   key={project.id}
                   className="project-picker-option"
+                  data-selected={selected.has(project.id)}
                   onClick={(event) => {
                     if (event.target.closest('[data-slot="checkbox"]')) return;
                     toggle(project.id);

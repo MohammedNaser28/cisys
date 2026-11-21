@@ -65,7 +65,7 @@ docker compose up -d
 
 Wait for Keycloak to become available before using the application. The realm is imported only on the first start; existing Keycloak data is not overwritten. To recreate the local development data, run `make reset` (this deletes the local databases).
 
-Introducing the project team requires a database reset for databases created before this change: run `make reset`, which deletes the local PostgreSQL and Keycloak data volumes, including projects, builds and users. New projects automatically assign their creator the LEAD role at creation time; existing team data is not migrated or repaired. Databases created after the change are not affected, and not every future upgrade requires a reset.
+Introducing direct project membership requires a database reset for databases created before this change: run `make reset`, which deletes the local PostgreSQL and Keycloak data volumes, including projects, builds and users. New projects automatically assign their creator the LEAD role at creation time; existing membership data is not migrated or repaired. Databases created after the change are not affected, and not every future upgrade requires a reset. The reusable Teams feature needs no reset: `R__schema.sql` adds its tables and the project's `teamid` column to existing databases.
 
 Signing out returns to the public front page, which needs `http://localhost:5173/*` as a valid post-logout redirect URI on the `cisys-ui` client. Realms imported before this setting was added must either be re-imported with `make reset` or updated in the Keycloak admin console (Clients → `cisys-ui` → Valid post logout redirect URIs).
 
@@ -137,13 +137,24 @@ If you prefer not to use Compose, run PostgreSQL and Keycloak yourself and point
 | `DB_URL`            | `jdbc:postgresql://localhost:5432/cisys` | JDBC URL                                             |
 | `DB_USER`           | `cisys`                                  | Database user                                        |
 | `DB_PASSWORD`       | `cisys`                                  | Database password                                    |
-| `CISYS_GIT_*`       | not set                                  | Read-only Git provider tokens, referenced by name from the build form |
+| `CISYS_GIT_*`       | not set                                  | Read-only Git provider tokens referenced by an admin-only project credential or per-build reference |
+| `CISYS_SECRET_KEY`  | not set                                  | Base64-encoded 32-byte key for encrypted team Git tokens |
 | `CISYS_GIT_ALLOWED_HOSTS` | `github.com,gitlab.com`            | HTTPS hosts that may be cloned                       |
 | `CISYS_GIT_ALLOWED_PORTS` | `443`                              | Ports that may be used; keep `443` in the list       |
 | `CISYS_GIT_ALLOWED_NETWORKS` | not set                        | Private CIDR ranges that may be fetched, for a local server |
 | `CISYS_GIT_INSECURE_TLS_HOSTS` | not set                     | Hosts whose self-signed certificate is accepted      |
 
+Team tokens are bound to their team id with AES-256-GCM authenticated encryption. Changing `CISYS_SECRET_KEY` makes existing stored tokens unusable, so they must be re-entered. A public project never uses its team's token.
+
 The runner executes repository-controlled code. Read the **Builds** chapter of the manual and [SECURITY.md](SECURITY.md) before using it.
+
+`CISYS_SECRET_KEY` must decode from base64 to exactly 32 bytes. Generate one with:
+
+```bash
+openssl rand -base64 32
+```
+
+Keep the key outside the repository and stable across restarts. The application still starts when it is missing, but team-token writes return `503`. If it changes, existing encrypted tokens cannot be decrypted and must be re-entered. There is no key-rotation support.
 
 ### Running the built frontend on another origin
 

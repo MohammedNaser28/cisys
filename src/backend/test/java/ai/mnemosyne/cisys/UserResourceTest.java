@@ -17,6 +17,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -58,6 +59,8 @@ class UserResourceTest {
     TestUserDirectory.reset();
     QuarkusTransaction.requiringNew()
         .run(() -> {
+          TeamMember.deleteAll();
+          Team.deleteAll();
           ProjectMember.deleteAll();
           Build.deleteAll();
           Project.deleteAll();
@@ -97,6 +100,45 @@ class UserResourceTest {
 
   private static boolean assigned(String subject, Long projectId) {
     return QuarkusTransaction.requiringNew().call(() -> ProjectMember.isMember(projectId, subject));
+  }
+
+  private static Long team(String name, String creator) {
+    return QuarkusTransaction.requiringNew()
+        .call(() -> {
+          Team team = new Team();
+          team.name = name;
+          team.ownerSubject = creator;
+          team.createdAt = java.time.Instant.now();
+          team.persist();
+          TeamMember m = new TeamMember();
+          m.teamId = team.id;
+          m.subject = creator;
+          m.role = ProjectMember.TeamRole.LEAD;
+          m.createdAt = java.time.Instant.now();
+          m.persist();
+          return team.id;
+        });
+  }
+
+  private static void teamMember(Long teamId, String subject, ProjectMember.TeamRole role) {
+    QuarkusTransaction.requiringNew()
+        .run(() -> {
+          TeamMember m = new TeamMember();
+          m.teamId = teamId;
+          m.subject = subject;
+          m.role = role;
+          m.createdAt = java.time.Instant.now();
+          m.persist();
+        });
+  }
+
+  private static long teamMemberCount(Long teamId, String subject) {
+    return QuarkusTransaction.requiringNew()
+        .call(() -> TeamMember.count("teamId = ?1 and subject = ?2", teamId, subject));
+  }
+
+  private static ProjectMember.TeamRole teamRole(Long teamId, String subject) {
+    return QuarkusTransaction.requiringNew().call(() -> TeamMember.roleOf(teamId, subject));
   }
 
   private static void assignRole(String subject, Long projectId, ProjectMember.TeamRole role) {
@@ -703,9 +745,30 @@ class UserResourceTest {
   @JwtSecurity(claims = {@Claim(key = "sub", value = "admin-id")})
   void adminDeleteOfSoleLeadFailsWith409() {
     Long project = project("delete-me-last-lead", "member-id");
+    Long team = team("delete-me-last-lead-team", "other-lead-id");
+    teamMember(team, "member-id", ProjectMember.TeamRole.MEMBER);
     given().when().delete("/api/users/member-id").then().statusCode(409);
     assertTrue(TestUserDirectory.USERS.containsKey("member-id"));
     assertEquals(ProjectMember.TeamRole.LEAD, roleOf("member-id", project));
+    // The rejected deletion is atomic: the team membership is still there.
+    assertEquals(1, teamMemberCount(team, "member-id"));
+  }
+
+  @Test
+  @TestSecurity(user = "admin", roles = "admin")
+  @JwtSecurity(claims = {@Claim(key = "sub", value = "admin-id")})
+  void adminCannotDeleteTheLastTeamLead() {
+    Long team = team("delete-last-team-lead", "member-id");
+
+    given()
+        .when()
+        .delete("/api/users/member-id")
+        .then()
+        .statusCode(409)
+        .body("error", containsString("team must keep at least one LEAD"));
+
+    assertTrue(TestUserDirectory.USERS.containsKey("member-id"));
+    assertEquals(ProjectMember.TeamRole.LEAD, teamRole(team, "member-id"));
   }
 
   @Test
@@ -717,5 +780,22 @@ class UserResourceTest {
     given().when().delete("/api/users/member-id").then().statusCode(204);
     assertFalse(TestUserDirectory.USERS.containsKey("member-id"));
     assertEquals(ProjectMember.TeamRole.LEAD, roleOf("other-lead-id", project));
+  }
+
+  @Test
+  @TestSecurity(user = "admin", roles = "admin")
+  @JwtSecurity(claims = {@Claim(key = "sub", value = "admin-id")})
+  void adminDeleteRemovesTeamMemberships() {
+    Long team = team("deleted-user-team", "other-lead-id");
+    teamMember(team, "member-id", ProjectMember.TeamRole.MEMBER);
+    teamMember(team, "member2-id", ProjectMember.TeamRole.LEAD);
+
+    given().when().delete("/api/users/member-id").then().statusCode(204);
+
+    assertEquals(0, teamMemberCount(team, "member-id"));
+    assertEquals(1, teamMemberCount(team, "member2-id"), "other members must survive");
+    assertNotNull(
+        QuarkusTransaction.requiringNew().call(() -> Team.findById(team)),
+        "the team itself must survive");
   }
 }

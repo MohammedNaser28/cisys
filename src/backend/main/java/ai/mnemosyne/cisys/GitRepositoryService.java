@@ -36,6 +36,7 @@ public class GitRepositoryService {
   static final int TIMEOUT_SECONDS = 10;
 
   @Inject RepositoryUrlValidator repositoryUrls;
+  @Inject ProjectCredentials projectCredentials;
 
   /** Test-only: accept file repository URLs, which the request path never produces. */
   @ConfigProperty(name = "cisys.poll.allow-local", defaultValue = "false")
@@ -46,10 +47,10 @@ public class GitRepositoryService {
    * without one.
    */
   public List<String> listBranches(Project project) {
-    if (project.privateRepository && project.credentialRef == null) {
+    if (project.privateRepository && !projectCredentials.configured(project)) {
       return List.of();
     }
-    return listBranches(project.repositoryUrl, project.credentialRef);
+    return listBranches(project.repositoryUrl, token(project));
   }
 
   /** Branches of an HTTPS repository on an allowed host. */
@@ -57,16 +58,30 @@ public class GitRepositoryService {
     return listBranches(repositoryUrl, null);
   }
 
-  /** Branches of an HTTPS repository on an allowed host, with the given credential reference. */
-  public List<String> listBranches(String repositoryUrl, String credentialRef) {
+  /** Branches of an HTTPS repository on an allowed host, with an already resolved token. */
+  List<String> listBranches(String repositoryUrl, String token) {
     String cloneUrl = repositoryUrl == null ? null : RepositoryUrls.cloneUrl(repositoryUrl);
     repositoryUrls.validate(cloneUrl);
     try {
-      return branchNames(remoteBranchRefs(cloneUrl, credentialRef));
+      return branchNames(remoteBranchRefs(cloneUrl, token));
     } catch (BranchLookupException e) {
       throw e;
     } catch (GitAPIException | RuntimeException e) {
       throw new BranchLookupException("Unable to read branches from the repository", e);
+    }
+  }
+
+  /**
+   * Checks that a candidate token can read the repository. It uses the same URL validation, host
+   * allowlist, resolver and TLS configuration as a real fetch, and never stores anything.
+   */
+  public void verifyToken(String repositoryUrl, String token) {
+    String cloneUrl = repositoryUrl == null ? null : RepositoryUrls.cloneUrl(repositoryUrl);
+    repositoryUrls.validate(cloneUrl);
+    try {
+      remoteBranchRefs(cloneUrl, token);
+    } catch (GitAPIException | RuntimeException e) {
+      throw new BranchLookupException("The token could not access the repository", e);
     }
   }
 
@@ -77,10 +92,9 @@ public class GitRepositoryService {
     return remoteBranchRefs(repositoryUrl, null);
   }
 
-  /** The remote refs used for branch discovery, using the credential reference when one is set. */
-  protected Collection<String> remoteBranchRefs(String repositoryUrl, String credentialRef)
+  /** The remote refs used for branch discovery, using the resolved token when one is set. */
+  protected Collection<String> remoteBranchRefs(String repositoryUrl, String token)
       throws GitAPIException {
-    String token = token(credentialRef);
     Path dir = null;
     try {
       dir = Files.createTempDirectory("cisys-branches-");
@@ -112,7 +126,7 @@ public class GitRepositoryService {
    * the project, so a stored build identity is never re-derived from a changed repository URL.
    */
   public Map<Integer, String> listPullRequests(Project project) {
-    if (project.privateRepository && project.credentialRef == null) {
+    if (project.privateRepository && !projectCredentials.configured(project)) {
       return Map.of();
     }
     String url = project.repositoryUrl;
@@ -133,8 +147,7 @@ public class GitRepositoryService {
     try {
       Map<Integer, String> heads = new TreeMap<>();
       for (Map.Entry<String, String> ref :
-          remoteRefs(cloneUrl, project.credentialRef, local || repositoryUrls.verifyTls(url))
-              .entrySet()) {
+          remoteRefs(cloneUrl, token(project), local || repositoryUrls.verifyTls(url)).entrySet()) {
         Integer number = provider.number(ref.getKey());
         if (number != null) {
           heads.put(number, ref.getValue());
@@ -165,9 +178,8 @@ public class GitRepositoryService {
    * refs are listed and the caller filters them. Overridden in tests so no test reaches the
    * network.
    */
-  protected Map<String, String> remoteRefs(
-      String repositoryUrl, String credentialRef, boolean verifyTls) throws GitAPIException {
-    String token = token(credentialRef);
+  protected Map<String, String> remoteRefs(String repositoryUrl, String token, boolean verifyTls)
+      throws GitAPIException {
     Path dir = null;
     try {
       dir = Files.createTempDirectory("cisys-refs-");
@@ -198,18 +210,15 @@ public class GitRepositoryService {
     }
   }
 
-  /**
-   * The token of a credential reference, or null when the project has none. Overridden in tests.
-   */
-  protected String token(String credentialRef) {
-    if (credentialRef == null) {
-      return null;
-    }
-    String token = System.getenv(credentialRef);
-    if (token == null || token.isBlank()) {
+  /** The project's resolved token; overridden in tests so branch discovery never reads the env. */
+  protected String token(Project project) {
+    try {
+      return projectCredentials.token(project);
+    } catch (CredentialCipher.CredentialException e) {
+      throw new BranchLookupException(e.getMessage(), null);
+    } catch (IllegalStateException e) {
       throw new BranchLookupException("Missing Git credential", null);
     }
-    return token;
   }
 
   /** Never follow redirects; certificate verification is off only for hosts an admin allowed. */

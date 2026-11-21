@@ -28,8 +28,8 @@ import java.util.TreeSet;
  * apply uniformly:
  *
  * <ul>
- *   <li>a project keeps at least one LEAD: removing or demoting the last one answers 409, including
- *       for global admins (as on the team API);
+ *   <li>a project keeps at least one direct LEAD: removing or demoting the last one answers 409,
+ *       including for global admins (as on the team API); team membership does not count;
  *   <li>the project's creator can be demoted or removed only by a global admin.
  * </ul>
  *
@@ -56,11 +56,13 @@ public class ProjectMemberService {
     if (project == null) {
       throw problem(404, "Unknown project");
     }
-    Panache.getEntityManager().lock(project, LockModeType.PESSIMISTIC_WRITE);
+    // The caller (or lockProjects) loaded the row before this call, and upgrading the lock does
+    // not refresh it, so re-read the row under the lock before its fields drive a decision.
+    Panache.getEntityManager().refresh(project, LockModeType.PESSIMISTIC_WRITE);
     return project;
   }
 
-  /** Throws 409 when the project has no other LEAD than the one being removed or demoted. */
+  /** Throws 409 when the project has no other direct LEAD than the one being removed or demoted. */
   void requireAnotherLead(Long projectId) {
     if (ProjectMember.count("projectId = ?1 and role = ?2", projectId, TeamRole.LEAD) <= 1) {
       throw problem(409, "A project must keep at least one LEAD; add another LEAD first");
@@ -180,8 +182,9 @@ public class ProjectMemberService {
   }
 
   /**
-   * Removes every membership of {@code subject}, enforcing the last-LEAD and creator safeguards for
-   * each project. Used by admin user deletion. Deletes nothing when any check fails.
+   * Removes every project membership of {@code subject}, enforcing the last-LEAD and creator
+   * safeguards for each project. Used by admin user deletion. Deletes nothing when any project
+   * check fails.
    *
    * <p>Every row checked or deleted here is refreshed from the database while the lock on its
    * project is held, so a session-cached row loaded before the lock cannot drive a stale safeguard

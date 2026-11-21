@@ -1836,7 +1836,7 @@ class PullRequestBuildTest {
                     workspace,
                     "file:" + root.resolve("no-such-repository.git"),
                     "main",
-                    "CISYS_GIT_DOES_NOT_EXIST",
+                    "unused-token",
                     "0000000000000000000000000000000000000000",
                     null,
                     1024,

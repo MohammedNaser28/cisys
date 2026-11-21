@@ -45,6 +45,7 @@ class BuildResourceTest {
 
   @Inject BuildRunner runner;
   @Inject BuildLogs logs;
+  @Inject CredentialCipher cipher;
 
   private Long project(boolean priv) {
     return QuarkusTransaction.requiringNew()
@@ -63,6 +64,25 @@ class BuildResourceTest {
           m.createdAt = java.time.Instant.now();
           m.persist();
           return p.id;
+        });
+  }
+
+  private Long attachTeam(Long projectId) {
+    return QuarkusTransaction.requiringNew()
+        .call(() -> {
+          Project p = Project.findById(projectId);
+          Team team = new Team();
+          team.name = "build-team-" + java.util.UUID.randomUUID();
+          team.ownerSubject = "owner-id";
+          team.persist();
+          p.teamId = team.id;
+          TeamMember member = new TeamMember();
+          member.teamId = team.id;
+          member.subject = "owner-id";
+          member.role = ProjectMember.TeamRole.LEAD;
+          member.createdAt = java.time.Instant.now();
+          member.persist();
+          return team.id;
         });
   }
 
@@ -257,6 +277,44 @@ class BuildResourceTest {
         Thread.sleep(50);
       }
       assertFalse(runner.hasPendingBuilds(), "Build did not finish");
+    }
+  }
+
+  @Test
+  @TestSecurity(user = "lead", roles = "lead")
+  @JwtSecurity(claims = @Claim(key = "sub", value = "owner-id"))
+  void buildSnapshotsTheStoredSecretReferenceWithoutCopyingTheToken() {
+    Long projectId = project(true);
+    Long teamId = attachTeam(projectId);
+    String token = "stored-" + java.util.UUID.randomUUID();
+    QuarkusTransaction.requiringNew()
+        .run(() -> Team.<Team>findById(teamId).tokenSecret = cipher.encrypt(token, teamId));
+    Long buildId = null;
+    try {
+      String body =
+          given()
+              .contentType("application/json")
+              .body(REQUEST)
+              .post("/api/projects/" + projectId + "/builds")
+              .then()
+              .statusCode(200)
+              .body("$", not(hasKey("credentialRef")))
+              .extract()
+              .asString();
+      assertFalse(body.contains(token));
+      buildId =
+          QuarkusTransaction.requiringNew()
+              .call(() ->
+                  Build.<Build>find("projectId = ?1 order by id desc", projectId).firstResult().id);
+      Long id = buildId;
+      assertEquals(
+          ProjectCredentials.storedSecret(teamId),
+          QuarkusTransaction.requiringNew().call(() -> Build.<Build>findById(id).credentialRef));
+    } finally {
+      if (buildId != null) {
+        Long id = buildId;
+        QuarkusTransaction.requiringNew().run(() -> Build.deleteById(id));
+      }
     }
   }
 
@@ -858,7 +916,7 @@ class BuildResourceTest {
   @Test
   @TestSecurity(user = "member", roles = "member")
   @JwtSecurity(claims = @Claim(key = "sub", value = "other-id"))
-  void memberRerunsFinishedBuildAtSameCommitWithCurrentCredential() {
+  void memberRerunsFinishedBuildAtSameCommitWithCurrentEnvironmentReference() {
     Long id = project(true);
     membership(id, "other-id", ProjectMember.TeamRole.MEMBER);
     Long b = finished(id, "FAILED");
@@ -883,9 +941,76 @@ class BuildResourceTest {
               .extract()
               .path("id");
       Build row = stored((long) queued);
+      // Without a stored token, the rerun snapshots the project's environment reference.
       assertEquals("CISYS_GIT_CURRENT", row.credentialRef);
       assertEquals("other-id", row.requestedBy);
       assertTrue(row.number > stored(b).number);
+    } finally {
+      deleteQueued(id);
+    }
+  }
+
+  @Test
+  @TestSecurity(user = "lead", roles = "lead")
+  @JwtSecurity(claims = @Claim(key = "sub", value = "owner-id"))
+  void rerunSnapshotsTheStoredTokenOverTheEnvironmentReference() {
+    Long id = project(true);
+    Long teamId = attachTeam(id);
+    String token = "stored-" + java.util.UUID.randomUUID();
+    Long b = finished(id, "PASSED");
+    QuarkusTransaction.requiringNew()
+        .run(() -> {
+          Project p = Project.findById(id);
+          p.credentialRef = "CISYS_GIT_CURRENT";
+          Team.<Team>findById(teamId).tokenSecret = cipher.encrypt(token, teamId);
+        });
+    try {
+      int queued =
+          given()
+              .contentType("application/json")
+              .post(rerun(id, b))
+              .then()
+              .statusCode(200)
+              .body("status", equalTo("QUEUED"), "$", not(hasKey("credentialRef")))
+              .extract()
+              .path("id");
+      Build row = stored((long) queued);
+      assertEquals(ProjectCredentials.storedSecret(teamId), row.credentialRef);
+      assertFalse(row.credentialRef.contains(token), "the token is never snapshotted");
+    } finally {
+      deleteQueued(id);
+    }
+  }
+
+  @Test
+  @TestSecurity(user = "lead", roles = "lead")
+  @JwtSecurity(claims = @Claim(key = "sub", value = "owner-id"))
+  void rerunSnapshotsTheProjectsCurrentTeamToken() {
+    Long id = project(true);
+    attachTeam(id);
+    Long b = finished(id, "PASSED");
+    Long currentTeam =
+        QuarkusTransaction.requiringNew()
+            .call(() -> {
+              Project p = Project.findById(id);
+              Team team = new Team();
+              team.name = "rerun-current-team-" + java.util.UUID.randomUUID();
+              team.ownerSubject = "owner-id";
+              team.persist();
+              TeamMember member = new TeamMember();
+              member.teamId = team.id;
+              member.subject = "owner-id";
+              member.role = ProjectMember.TeamRole.LEAD;
+              member.createdAt = java.time.Instant.now();
+              member.persist();
+              team.tokenSecret = cipher.encrypt("current-team-token", team.id);
+              p.teamId = team.id;
+              return team.id;
+            });
+    try {
+      int queued = postRerun(id, b).statusCode(200).extract().path("id");
+      assertEquals(
+          ProjectCredentials.storedSecret(currentTeam), stored((long) queued).credentialRef);
     } finally {
       deleteQueued(id);
     }

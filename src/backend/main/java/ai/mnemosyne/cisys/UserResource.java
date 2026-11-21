@@ -63,8 +63,11 @@ public class UserResource {
   @Inject UserDirectory directory;
   @Inject ProjectMemberService memberService;
   @Inject AuditService audit;
+  @Inject TeamMemberService teamMemberService;
 
-  /** A user to create or change; leads only send {@code projectIds} when changing a user. */
+  /**
+   * A user to create or change; omitted project membership leaves existing assignments unchanged.
+   */
   public record Input(
       String username,
       String email,
@@ -401,10 +404,16 @@ public class UserResource {
     }
     User user = directory.find(id).orElseThrow(NotFoundException::new);
     String role = directory.role(id);
-    // Memberships are removed first with the last-LEAD safeguards; the directory is external, so
-    // if deleting the user fails, the user still exists without memberships and can be deleted on
-    // retry. The reverse order could strand projects without a LEAD.
-    QuarkusTransaction.requiringNew().run(() -> memberService.removeSubject(id, user.username()));
+    // Team rows are locked before project rows, the order documented on TeamMemberService; the
+    // reverse would deadlock against a concurrent team attach. Memberships are removed first with
+    // the last-LEAD safeguards; the directory is external, so if deleting the user fails, the user
+    // still exists without memberships and can be deleted on retry. The reverse order could strand
+    // projects without a LEAD.
+    QuarkusTransaction.requiringNew()
+        .run(() -> {
+          teamMemberService.removeSubject(id, user.username());
+          memberService.removeSubject(id, user.username());
+        });
     directory.delete(id);
     audit.bestEffortSuccess(
         AuditAction.USER_DELETE,
@@ -447,9 +456,9 @@ public class UserResource {
     if (!identity.hasRole("lead")) {
       throw new ForbiddenException();
     }
-    // Shared project LEAD rule, as in ProjectAccess: the team alone grants no management.
+    // Shared effective project LEAD rule, as in ProjectAccess.
     return new Caller(
-        subject, false, ProjectMember.projectIds(subject, ProjectMember.TeamRole.LEAD));
+        subject, false, ProjectRoles.projectIds(subject, ProjectMember.TeamRole.LEAD));
   }
 
   private Roles roles() {

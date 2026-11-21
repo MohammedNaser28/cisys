@@ -5,7 +5,7 @@
 **Reports** sum up the builds of several projects. Open them with **Reports** in the header. They are for users with the `lead` or `admin` realm role:
 
 - **Admins** see every project.
-- **Leads** see the projects where they have a `LEAD` row. Projects where they are only a `MEMBER` are left out.
+- **Leads** see projects where they have effective project `LEAD` access, either directly or through the project's team. Projects where they are only a `MEMBER` are left out.
 
 ## Layout
 
@@ -77,4 +77,4 @@ The export button downloads the same report, with the same filters, as a PDF. Th
 | GET    | `/api/reports/builds/trends?projectId=&period=&bucket=&from=&to=` | The build trends as JSON |
 | GET    | `/api/reports/builds/pdf?projectId=&period=`                      | The report as a PDF      |
 
-`period` is `7d`, `30d`, `365d` or `all`. `bucket` is `day`, `week` or omitted. `from` and `to` are ISO-8601 instants that replace `period`; `from` must not be after `to`. An invalid `period`, `bucket`, `from` or `to` answers `400`. A `projectId` outside the caller's projects answers `403`, and so does a caller without the `lead` or `admin` role.
+`period` is `7d`, `30d`, `365d` or `all`. `bucket` is `day`, `week` or omitted. `from` and `to` are ISO-8601 instants that replace `period`; `from` must not be after `to`. An invalid `period`, `bucket`, `from` or `to` answers `400`. A `projectId` outside the caller's projects answers `403`, and so does a caller without the `lead` or `admin` role. A project reached through one of the caller's teams counts as one of their projects.

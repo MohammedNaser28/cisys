@@ -52,7 +52,7 @@ import AppFooter from "./components/layout/AppFooter";
 import PageHeader from "./components/layout/PageHeader";
 import ImagesPanel from "./ImagesPanel";
 import SettingsPanel from "./SettingsPanel";
-import UsersPanel from "./UsersPanel";
+import UsersPage from "./UsersPage";
 import AuditPanel from "./AuditPanel";
 import BuildStatistics from "./BuildStatistics";
 import PublicHome from "./PublicHome";
@@ -77,6 +77,11 @@ import {
 } from "./project-paths";
 import { buildPath } from "./build-format";
 import { resolveConfig } from "./app-config";
+import {
+  canBuildProject,
+  canManageProject,
+  effectiveProjectRole,
+} from "./project-roles";
 import headerLogo from "./assets/logo-header.svg";
 import i18n from "./i18n";
 import "./style.css";
@@ -115,31 +120,17 @@ async function publicJson(path, opts = {}) {
 
 /**
  * The caller's project role, keyed by project id. Global admins short-circuit to ADMIN
- * without calling the backend; everyone else learns their role from the team list,
- * which the backend exposes to members and admins. A failed call means no rights, not a
- * relaxed gate — the server still enforces everything.
+ * without calling the backend; everyone else uses the effective role already included in each
+ * project response. The backend combines direct and team access, while the frontend only uses
+ * the result to decide which controls to render. The server still enforces every operation.
  */
-async function fetchTeamRoles(list, userInfo) {
-  if (userInfo.roles.includes("admin"))
-    return new Map(list.map((p) => [p.id, "ADMIN"]));
-  const entries = await Promise.all(
-    list.map(async (p) => {
-      try {
-        const members = await api(`/projects/${p.id}/team`);
-        const me = Array.isArray(members)
-          ? members.find(
-              (m) =>
-                m.username &&
-                m.username.toLowerCase() === userInfo.username.toLowerCase(),
-            )
-          : null;
-        return [p.id, me?.role ?? null];
-      } catch {
-        return [p.id, null];
-      }
-    }),
+async function fetchProjectRoles(list, userInfo) {
+  return new Map(
+    list.map((project) => [
+      project.id,
+      effectiveProjectRole(project, userInfo),
+    ]),
   );
-  return new Map(entries);
 }
 
 async function api(path, opts = {}) {
@@ -191,12 +182,19 @@ function AppPage() {
   const [ready, setReady] = useState(false);
   const [user, setUser] = useState(null);
   const [projects, setProjects] = useState([]);
+  const [teams, setTeams] = useState([]);
   const [team, setTeam] = useState(() => new Map());
   const [error, setError] = useState("");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [priv, setPriv] = useState(false);
   const [credential, setCredential] = useState("");
+  const [teamId, setTeamId] = useState("");
+  const canManageUsers =
+    user != null &&
+    (user.roles.includes("lead") || user.roles.includes("admin"));
+  const canViewTeams =
+    canManageUsers || teams.some((team) => team.role === "LEAD");
   const [submitting, setSubmitting] = useState(false);
   const [branding, setBranding] = useState(null);
   const [settingsDirty, setSettingsDirty] = useState(false);
@@ -280,7 +278,8 @@ function AppPage() {
         setBranding(await api("/branding"));
         const list = await api("/projects");
         setProjects(list);
-        setTeam(await fetchTeamRoles(list, session));
+        setTeams(await api("/teams"));
+        setTeam(await fetchProjectRoles(list, session));
         setReady(true);
       } catch (e) {
         setError(e.message || i18n.t("app.loadFailed"));
@@ -309,6 +308,14 @@ function AppPage() {
       blocker.proceed();
     else blocker.reset();
   }, [blocker, submitting]);
+
+  useEffect(() => {
+    if (mode !== "app" || !user || (page !== "projects" && !projectSettings))
+      return;
+    api("/teams")
+      .then(setTeams)
+      .catch(() => {});
+  }, [mode, page, projectSettings, user]);
 
   const go = (target, replace = false) =>
     navigate(pagePath(target), { replace });
@@ -369,13 +376,14 @@ function AppPage() {
     setUrl("");
     setPriv(false);
     setCredential("");
+    setTeamId("");
   }
 
   /** Reloads the project list together with the caller's role per project. */
   async function refreshProjects() {
     const list = await api("/projects");
     setProjects(list);
-    if (user) setTeam(await fetchTeamRoles(list, user));
+    if (user) setTeam(await fetchProjectRoles(list, user));
     return list;
   }
 
@@ -385,7 +393,12 @@ function AppPage() {
     setError("");
     setSubmitting(true);
     try {
-      const body = { name, repositoryUrl: url, privateRepository: priv };
+      const body = {
+        name,
+        repositoryUrl: url,
+        privateRepository: priv,
+        teamId: teamId ? Number(teamId) : null,
+      };
       // Only admins may set or clear a project credential; a lead's project has none.
       if (user.roles.includes("admin"))
         body.credentialRef =
@@ -431,7 +444,10 @@ function AppPage() {
   const canEditSettings =
     settingsProject != null &&
     user != null &&
-    (user.roles.includes("admin") || team.get(settingsProject.id) === "LEAD");
+    canManageProject(
+      team.get(settingsProject.id),
+      user.roles.includes("admin"),
+    );
 
   // A project's settings page is for its LEADs and admins, like the pencil button; the top-level
   // pages follow the navigation links.
@@ -443,7 +459,8 @@ function AppPage() {
       (projectSettings && projectName !== null && !canEditSettings) ||
       ((page === "images" || page === "settings" || page === "audit") &&
         !admin) ||
-      ((page === "users" || page === "reports") && !lead)
+      (page === "reports" && !lead) ||
+      (page === "users" && !canViewTeams)
     )
       showFrontPage();
   }, [
@@ -454,6 +471,7 @@ function AppPage() {
     projectSettings,
     projectName,
     canEditSettings,
+    canViewTeams,
     showFrontPage,
   ]);
 
@@ -525,17 +543,17 @@ function AppPage() {
       </main>
     );
   const canCreate = user.roles.includes("lead") || user.roles.includes("admin");
-  const canManageUsers = canCreate;
   // Action visibility follows each project's team, as reported by the backend:
   // global admins do anything, project LEADs edit (they cannot delete), project
   // MEMBERs only view and build. project.owned is not consulted.
   const isAdmin = user.roles.includes("admin");
   const canDelete = () => isAdmin;
-  const canEdit = (project) => isAdmin || team.get(project.id) === "LEAD";
+  const canEdit = (project) => canManageProject(team.get(project.id), isAdmin);
   const viewedProject =
     projectName !== null ? projects.find((p) => p.name === projectName) : null;
   const canStartBuilds =
-    viewedProject != null && (isAdmin || team.get(viewedProject.id) != null);
+    viewedProject != null &&
+    canBuildProject(team.get(viewedProject.id), isAdmin);
   // Only admins can set a project credential, and only a private project can have one.
   const showCredential = user.roles.includes("admin") && priv;
   const onPage = (target) => page === target;
@@ -598,14 +616,14 @@ function AppPage() {
                 {t("nav.images")}
               </button>
             )}
-            {canManageUsers && (
+            {canViewTeams && (
               <button
                 type="button"
                 className="nav-link"
                 aria-current={onPage("users") ? "page" : undefined}
                 onClick={() => go("users")}
               >
-                {t("nav.users")}
+                {canManageUsers ? t("nav.users") : t("nav.teams")}
               </button>
             )}
             {user.roles.includes("admin") && (
@@ -699,6 +717,7 @@ function AppPage() {
               key={settingsProject.id}
               project={settingsProject}
               api={api}
+              teams={teams}
               isAdmin={user.roles.includes("admin")}
               user={user}
               onDirtyChange={setSettingsDirty}
@@ -759,8 +778,8 @@ function AppPage() {
         </main>
       ) : page === "images" && user.roles.includes("admin") ? (
         <ImagesPanel api={api} />
-      ) : page === "users" && canManageUsers ? (
-        <UsersPanel api={api} user={user} />
+      ) : page === "users" && canViewTeams ? (
+        <UsersPage api={api} user={user} />
       ) : page === "reports" && canCreate ? (
         <BuildStatistics
           load={api}
@@ -848,6 +867,28 @@ function AppPage() {
                         onChange={(e) => setPriv(e.target.checked)}
                       />
                     </span>
+                  </div>
+                  <div className="form-field">
+                    <Label htmlFor="project-team">
+                      {t("projects.teamOptional")}
+                    </Label>
+                    <select
+                      id="project-team"
+                      value={teamId}
+                      onChange={(e) => setTeamId(e.target.value)}
+                    >
+                      <option value="">{t("projects.teamNone")}</option>
+                      {teams
+                        .filter(
+                          (teamOption) => isAdmin || teamOption.role === "LEAD",
+                        )
+                        .map((teamOption) => (
+                          <option key={teamOption.id} value={teamOption.id}>
+                            {teamOption.name}
+                          </option>
+                        ))}
+                    </select>
+                    <p className="field-hint">{t("projects.teamAssignHint")}</p>
                   </div>
                   {showCredential && (
                     <div className="form-field">

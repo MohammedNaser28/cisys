@@ -48,6 +48,8 @@ function project(id = 1) {
     repositoryUrl: "https://github.com/org/repo",
     privateRepository: false,
     credentialRef: null,
+    teamId: null,
+    teamName: null,
   };
 }
 
@@ -169,8 +171,19 @@ function apiMock(calls, members, opts = {}) {
     }
     if (method === "PUT" && path === "/projects/1") {
       if (putRepo) throw putRepo;
-      return { ...project(), name: bin?.name };
+      return {
+        ...project(),
+        name: bin?.name,
+        repositoryUrl: bin?.repositoryUrl,
+        privateRepository: bin?.privateRepository,
+      };
     }
+    if (method === "PUT" && path === "/projects/1/team-assignment")
+      return {
+        ...project(),
+        teamId: bin.teamId,
+        teamName: bin.teamId ? "build" : null,
+      };
     if (method === "POST" && path === "/projects/1/team") {
       if (postError) throw postError;
       return { username: bin.username, role: bin.role };
@@ -431,6 +444,103 @@ describe("ProjectSettings tabs (Team save semantics)", () => {
     );
     // And there is nothing to discard or save anymore; the buttons hide.
     expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+  });
+});
+
+describe("ProjectSettings team assignment", () => {
+  it("does not render a project-level token editor", () => {
+    renderUnified(apiMock([], led), { ...project(), privateRepository: true });
+    expect(screen.queryByLabelText("Git token")).toBeNull();
+    expect(screen.queryByText(/No token is set/)).toBeNull();
+  });
+
+  it("assigns a selected team through the team-assignment endpoint", async () => {
+    const calls = [];
+    render(
+      <ProjectSettings
+        project={project()}
+        api={apiMock(calls, led)}
+        teams={[{ id: 7, name: "build", role: "LEAD" }]}
+        isAdmin={false}
+        user={userFor()}
+        onSaved={() => {}}
+      />,
+    );
+    fireEvent.change(document.getElementById("settings-team"), {
+      target: { value: "7" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await vi.waitFor(() =>
+      expect(calls).toContainEqual([
+        "PUT",
+        "/projects/1/team-assignment",
+        { teamId: 7 },
+      ]),
+    );
+  });
+
+  it("clears the project team with a null assignment", async () => {
+    const calls = [];
+    render(
+      <ProjectSettings
+        project={{ ...project(), teamId: 7, teamName: "build" }}
+        api={apiMock(calls, led)}
+        teams={[{ id: 7, name: "build", role: "LEAD" }]}
+        isAdmin={false}
+        user={userFor()}
+        onSaved={() => {}}
+      />,
+    );
+    fireEvent.change(document.getElementById("settings-team"), {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await vi.waitFor(() =>
+      expect(calls).toContainEqual([
+        "PUT",
+        "/projects/1/team-assignment",
+        { teamId: null },
+      ]),
+    );
+  });
+
+  it("lets a LEAD make a private project public", async () => {
+    const calls = [];
+    renderUnified(apiMock(calls, led), {
+      ...project(),
+      privateRepository: true,
+    });
+    const checkbox = screen.getByLabelText("Private project");
+    expect(checkbox.disabled).toBe(false);
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await vi.waitFor(() =>
+      expect(calls).toContainEqual([
+        "PUT",
+        "/projects/1",
+        expect.objectContaining({ privateRepository: false }),
+      ]),
+    );
+  });
+
+  it("leaves the private switch enabled for an admin", () => {
+    renderUnified(
+      apiMock([], led),
+      { ...project(), privateRepository: true },
+      true,
+      { username: "admin", subject: "admin-id", roles: ["admin"] },
+    );
+    expect(screen.getByLabelText("Private project").disabled).toBe(false);
+  });
+
+  it("lets a LEAD make a public project private", () => {
+    renderUnified(apiMock([], led), project());
+    const checkbox = screen.getByLabelText("Private project");
+    expect(checkbox.disabled).toBe(false);
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(true);
+    expect(document.getElementById("settings-team")).toBeTruthy();
   });
 });
 

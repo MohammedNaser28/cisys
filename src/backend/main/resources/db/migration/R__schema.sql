@@ -4,6 +4,58 @@
 
 CREATE EXTENSION IF NOT EXISTS lo;
 
+CREATE TABLE IF NOT EXISTS team (
+    id bigint NOT NULL,
+    name character varying(100) NOT NULL,
+    ownersubject character varying(255) NOT NULL,
+    tokensecret bytea,
+    tokenupdatedat timestamp(6) with time zone,
+    tokenupdatedby character varying(255),
+    createdat timestamp(6) with time zone NOT NULL DEFAULT now(),
+    CONSTRAINT team_pkey PRIMARY KEY (id),
+    CONSTRAINT uk_team_name UNIQUE (name)
+);
+
+CREATE SEQUENCE IF NOT EXISTS team_seq START WITH 1 INCREMENT BY 50;
+
+DO $$
+DECLARE
+    conflicts text;
+BEGIN
+    WITH duplicate_names AS (
+        SELECT lower(name) AS normalized_name,
+               string_agg(format('%s (id=%s)', name, id), ', ' ORDER BY id) AS rows
+          FROM team
+         GROUP BY lower(name)
+        HAVING count(*) > 1
+    )
+    SELECT string_agg(format('%s: %s', normalized_name, rows), E'\n' ORDER BY normalized_name)
+      INTO conflicts
+      FROM duplicate_names;
+
+    IF conflicts IS NOT NULL THEN
+        RAISE EXCEPTION
+            'Cannot enforce case-insensitive team names. Resolve these conflicting rows first: %',
+            conflicts;
+    END IF;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_team_name_lower ON team (lower(name));
+
+CREATE TABLE IF NOT EXISTS teammember (
+    id bigint NOT NULL,
+    teamid bigint NOT NULL,
+    subject character varying(255) NOT NULL,
+    role character varying(16) NOT NULL DEFAULT 'MEMBER',
+    createdat timestamp(6) with time zone NOT NULL DEFAULT now(),
+    CONSTRAINT teammember_pkey PRIMARY KEY (id),
+    CONSTRAINT teammember_team_subject UNIQUE (teamid, subject),
+    CONSTRAINT teammember_team FOREIGN KEY (teamid) REFERENCES team (id) ON DELETE CASCADE,
+    CONSTRAINT teammember_role_check CHECK (role IN ('MEMBER', 'LEAD'))
+);
+CREATE INDEX IF NOT EXISTS teammember_subject ON teammember (subject);
+CREATE SEQUENCE IF NOT EXISTS teammember_seq START WITH 1 INCREMENT BY 50;
+
 CREATE TABLE IF NOT EXISTS project (
     id bigint NOT NULL,
     name character varying(100) NOT NULL,
@@ -17,6 +69,16 @@ CREATE TABLE IF NOT EXISTS project (
 );
 
 ALTER TABLE project ADD COLUMN IF NOT EXISTS credentialref character varying(100);
+-- Added separately so that existing databases gain the column, and declared only once.
+ALTER TABLE project ADD COLUMN IF NOT EXISTS teamid bigint;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'project_team_fk') THEN
+        ALTER TABLE project ADD CONSTRAINT project_team_fk
+            FOREIGN KEY (teamid) REFERENCES team (id) ON DELETE SET NULL;
+    END IF;
+END $$;
 
 DO $$
 DECLARE

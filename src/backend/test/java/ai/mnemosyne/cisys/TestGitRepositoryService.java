@@ -3,7 +3,7 @@
  *
  *   THE ACCOMPANYING PROGRAM IS PROVIDED UNDER THE TERMS OF THIS ECLIPSE
  *   PUBLIC LICENSE ("AGREEMENT"). ANY USE, REPRODUCTION OR DISTRIBUTION
- *   OF THE PROGRAM CONSTITUTES RECIPIENT'S ACCEPTANCE OF THIS AGREEMENT.
+ *   OF THIS PROGRAM CONSTITUTES RECIPIENT'S ACCEPTANCE OF THIS AGREEMENT.
  */
 
 package ai.mnemosyne.cisys;
@@ -37,20 +37,23 @@ public class TestGitRepositoryService extends GitRepositoryService {
   }
 
   @Override
-  protected String token(String credentialRef) {
+  protected String token(Project project) {
+    // A team secret goes through the real resolver, so its decryption is exercised.
+    if (project.teamId != null) {
+      return super.token(project);
+    }
     // The test alternative never reads the environment.
-    if ("CISYS_GIT_MISSING".equals(credentialRef)) {
+    if ("CISYS_GIT_MISSING".equals(project.credentialRef)) {
       throw new BranchLookupException("Missing Git credential", null);
     }
-    return credentialRef == null ? null : "test-token";
+    return project.credentialRef == null ? null : "test-token";
   }
 
   @Override
-  protected Collection<String> remoteBranchRefs(String repositoryUrl, String credentialRef)
+  protected Collection<String> remoteBranchRefs(String repositoryUrl, String token)
       throws GitAPIException {
     CALLS.incrementAndGet();
-    token(credentialRef);
-    CREDENTIAL.set(credentialRef);
+    CREDENTIAL.set(token);
     if (repositoryUrl.contains("unreachable")) {
       throw new GitAPIException("unreachable") {};
     }

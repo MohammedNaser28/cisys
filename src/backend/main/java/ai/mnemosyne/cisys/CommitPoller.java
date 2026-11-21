@@ -41,6 +41,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 public class CommitPoller {
   @Inject RepositoryMirror mirrors;
   @Inject BuildRunner builds;
+  @Inject ProjectCredentials credentials;
   @Inject PullRequestPoller pullRequests;
 
   @ConfigProperty(name = "cisys.poll.every", defaultValue = "60s")
@@ -139,9 +140,9 @@ public class CommitPoller {
   }
 
   private int pollProject(Project project, Settings settings) {
-    if (project.privateRepository && project.credentialRef == null) {
+    if (project.privateRepository && !credentials.configured(project)) {
       if (fetchFailures.add(project.id)) {
-        Log.warnf("Skipping private project %d: no credential reference", project.id);
+        Log.warnf("Skipping private project %d: no credential", project.id);
       }
       return 0;
     }
@@ -315,7 +316,7 @@ public class CommitPoller {
             "poll",
             project.repositoryUrl,
             branch,
-            project.credentialRef,
+            credentials.snapshotRef(project),
             commit,
             Build.Trigger.POLL,
             "poll",

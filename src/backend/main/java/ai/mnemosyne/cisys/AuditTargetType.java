@@ -12,6 +12,8 @@ package ai.mnemosyne.cisys;
 public enum AuditTargetType {
   PROJECT,
   PROJECT_MEMBER,
+  TEAM,
+  TEAM_MEMBER,
   USER,
   SETTINGS,
   BRANDING,

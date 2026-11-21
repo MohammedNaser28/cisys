@@ -168,14 +168,54 @@ body {
     );
   gap: 1rem;
 }
-/* The form gains a credential column for an admin's private project; keep the submit button on the same row. */
+/*
+ * The add form has a label/control/hint stack per field. A three-row subgrid
+ * keeps every label, every control and every hint on the same line, including
+ * the Team selector's hint and the optional credential field.
+ */
+.project-add {
+  grid-template-columns:
+    minmax(9rem, 1fr) minmax(13rem, 1.6fr) minmax(7rem, auto)
+    minmax(9rem, 1fr) auto;
+  grid-template-rows: auto 2.5rem auto;
+  align-items: start;
+  column-gap: 1rem;
+  row-gap: 0.5rem;
+}
 .project-add.has-credential {
   grid-template-columns:
-    minmax(10rem, 1fr) minmax(14rem, 1.6fr) 8rem minmax(11rem, 1fr)
-    auto;
+    minmax(9rem, 1fr) minmax(13rem, 1.6fr) minmax(7rem, auto)
+    minmax(9rem, 1fr) minmax(10rem, 1.1fr) auto;
 }
-.project-add {
-  align-items: end;
+.project-add > .form-field {
+  grid-row: 1 / -1;
+  grid-template-rows: subgrid;
+  gap: 0.5rem;
+}
+.project-add > button {
+  grid-column: -1;
+  grid-row: 2;
+  align-self: start;
+}
+@media (max-width: 1024px) {
+  .project-add,
+  .project-add.has-credential {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: none;
+    align-items: end;
+    row-gap: 1rem;
+  }
+  .project-add > .form-field {
+    grid-row: auto;
+    grid-template-rows: none;
+    gap: 0.6rem;
+  }
+  .project-add > button {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    justify-self: end;
+    align-self: end;
+  }
 }
 /* Icon buttons are shorter than the inputs beside them; centre them on the input. */
 .project-add > button,
@@ -210,6 +250,23 @@ body {
   height: 1.1rem;
   accent-color: var(--button-bg);
   cursor: pointer;
+}
+.private-choice input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.field-hint {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.85rem;
+}
+.credential-token-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.credential-token-row input {
+  flex: 1;
 }
 .empty-state {
   display: flex;
@@ -1105,11 +1162,21 @@ body {
 }
 .user-add {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
-  max-width: 36rem;
+  max-width: 48rem;
+}
+.user-add .form-field-wide {
+  grid-column: 1 / -1;
 }
 .user-add > button {
+  grid-column: 1 / -1;
   justify-self: end;
+}
+@media (max-width: 640px) {
+  .user-add {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .user-filters {
   display: grid;
@@ -1128,6 +1195,24 @@ body {
   text-align: start;
   padding: 1rem 0;
   border-top: 1px solid var(--card-border);
+  border-radius: 0.375rem;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.team-row {
+  grid-template-columns: minmax(8rem, 1fr) auto auto;
+  column-gap: 0.75rem;
+}
+#users .user-row:hover:not(.is-selected) {
+  background: color-mix(in srgb, var(--body-text) 4%, transparent);
+}
+#users .user-row:focus-within:not(.is-selected) {
+  background: color-mix(in srgb, var(--body-text) 4%, transparent);
+}
+#users .user-row.is-selected {
+  background: color-mix(in srgb, var(--button-bg) 12%, var(--card-bg));
+  box-shadow: inset 3px 0 0 var(--button-bg);
 }
 /* Three fixed slots, so icons line up across rows even when one is missing. */
 .user-actions {
@@ -1143,6 +1228,7 @@ body {
 .user-projects {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.4rem 0.9rem;
 }
 .user-tags {
@@ -1236,6 +1322,275 @@ body {
   margin: 0.35rem 0 0;
 }
 
+.section-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  margin-bottom: 1rem;
+  padding: 0.25rem;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 0.5rem;
+}
+.section-switch [role="tab"] {
+  min-height: 2.25rem;
+  padding: 0 1rem;
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted-foreground);
+  box-shadow: none;
+}
+.section-switch [role="tab"]:hover {
+  background: var(--surface-accent);
+  color: var(--body-text);
+}
+.section-switch [role="tab"][aria-selected="true"] {
+  background: var(--button-bg);
+  border-color: var(--button-bg);
+  color: var(--button-text);
+  font-weight: 600;
+}
+.section-switch [role="tab"][aria-selected="true"]:hover {
+  background: var(--button-hover);
+  border-color: var(--button-hover);
+  color: var(--button-text);
+}
+.section-switch [role="tab"]:focus-visible {
+  outline: 2px solid var(--section-header-color);
+  outline-offset: 2px;
+}
+.token-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+.token-actions .field-hint {
+  margin-right: auto;
+}
+.token-status {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.token-actions .user-actions {
+  margin-left: auto;
+}
+.team-add,
+.team-token-row {
+  display: grid;
+  gap: 0.75rem;
+}
+.team-add {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+.team-add > button {
+  justify-self: end;
+}
+.team-token-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+.team-token-row select,
+.member-row select,
+.member-add select,
+#project-team,
+#settings-team {
+  width: 100%;
+  min-height: 2.5rem;
+  border: 1px solid var(--card-border);
+  border-radius: 0.375rem;
+  background: var(--card-bg);
+  color: var(--body-text);
+  font: inherit;
+  padding: 0.5rem;
+}
+.form-field [data-slot="select-trigger"],
+.user-filters [data-slot="select-trigger"],
+.user-edit [data-slot="select-trigger"],
+.member-row [data-slot="select-trigger"],
+.member-add [data-slot="select-trigger"],
+.team-token-row [data-slot="select-trigger"] {
+  width: 100%;
+  height: 2.5rem;
+}
+@media (max-width: 700px) {
+  .team-add,
+  .team-token-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .team-add > button {
+    justify-self: end;
+  }
+  .token-actions {
+    align-items: flex-start;
+  }
+  .token-actions .token-status,
+  .token-actions > .field-hint {
+    flex: 1 0 100%;
+  }
+  .token-actions .user-actions {
+    margin-left: auto;
+  }
+}
+
+/* Teams panel */
+.team-row,
+.team-edit-row,
+.team-token-editor {
+  padding-block: 0.75rem;
+}
+#users .team-edit-row.is-selected,
+#users .team-token-editor.is-selected {
+  background: transparent;
+  box-shadow: none;
+}
+/*
+ * Every Teams form uses the same measure, so the add form and the inset edit
+ * and token panels line up instead of stretching across the whole card.
+ */
+.team-add,
+.team-edit-row > .user-edit,
+.team-token-editor > .user-edit {
+  width: 100%;
+  max-width: 40rem;
+}
+/*
+ * The editors are a compact inset panel rather than a tint across the whole
+ * row, so the form content and its actions share one width and edge.
+ */
+.team-edit-row > .user-edit,
+.team-token-editor > .user-edit {
+  gap: 0.75rem;
+  padding: 1rem;
+  background: var(--surface-accent);
+  border: 1px solid color-mix(in srgb, var(--button-bg) 22%, var(--card-border));
+  border-radius: 0.5rem;
+}
+.team-edit-row .member-row {
+  grid-template-columns: minmax(0, 1fr) 8.5rem auto;
+  gap: 0.5rem 0.75rem;
+  padding-block: 0.5rem;
+  justify-items: stretch;
+}
+.team-edit-row .member-row [data-slot="select-trigger"],
+.team-edit-row .member-add [data-slot="select-trigger"] {
+  width: 8.5rem;
+}
+.team-edit-row .member-actions {
+  justify-self: end;
+}
+.team-edit-row .member-add {
+  grid-template-columns: minmax(0, 1fr) 8.5rem auto;
+  gap: 0.5rem 0.75rem;
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+}
+.team-edit-row .token-actions,
+.team-token-editor .token-actions {
+  margin-top: 0.5rem;
+}
+.team-edit-row .token-actions .user-actions,
+.team-token-editor .token-actions .user-actions {
+  grid-template-columns: repeat(3, 2.5rem);
+}
+.team-token-row {
+  gap: 0.75rem;
+}
+.team-row .user-tags {
+  justify-content: flex-end;
+}
+@media (max-width: 640px) {
+  /*
+   * Keep the username and its remove action on one line, and let the role
+   * selector use the full width beneath them, instead of stacking three
+   * separate full-width rows per member.
+   */
+  .team-edit-row .member-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "member actions"
+      "role role";
+    align-items: center;
+  }
+  .team-edit-row .member-row .member-name {
+    grid-area: member;
+  }
+  .team-edit-row .member-row [data-slot="select-trigger"] {
+    grid-area: role;
+    width: 100%;
+  }
+  .team-edit-row .member-row .member-actions {
+    grid-area: actions;
+    justify-self: end;
+  }
+  .team-edit-row .member-add {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "username username"
+      "role add";
+  }
+  .team-edit-row .member-add > input {
+    grid-area: username;
+  }
+  .team-edit-row .member-add [data-slot="select-trigger"] {
+    grid-area: role;
+    width: 100%;
+  }
+  .team-edit-row .member-add > button {
+    grid-area: add;
+    justify-self: end;
+  }
+  .team-row .user-tags {
+    justify-content: flex-start;
+  }
+}
+
+/* Teams section */
+.teams-layout {
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.8fr) minmax(0, 2fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+.teams-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.team-choice {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  color: var(--body-text);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.team-choice:hover,
+.team-choice[aria-current="true"] {
+  border-color: var(--card-border);
+  background: var(--surface-accent);
+}
+.team-detail h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+@media (max-width: 800px) {
+  .teams-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Searchable project picker (Users tab) */
 .project-picker {
   display: grid;
@@ -1292,9 +1647,16 @@ body {
   font-size: 0.875rem;
   cursor: pointer;
   overflow-wrap: anywhere;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 .project-picker-option:hover {
   background: var(--muted, color-mix(in srgb, currentColor 8%, transparent));
+}
+.project-picker-option[data-selected="true"] {
+  background: color-mix(in srgb, var(--button-bg) 12%, var(--card-bg));
+  box-shadow: inset 3px 0 0 var(--button-bg);
 }
 .project-picker-option > span {
   flex: 1;

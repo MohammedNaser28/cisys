@@ -10,6 +10,7 @@ erDiagram
         STRING repository_url
         BOOLEAN private_repository
         STRING owner_subject
+        BIGINT team_id FK
         STRING pull_request_provider
         INTEGER pull_request_baseline
         BIGINT build_counter
@@ -87,6 +88,26 @@ erDiagram
         BIGINT id PK
         BIGINT project_id FK
         STRING subject
+        STRING role
+        TIMESTAMP created_at
+    }
+
+    TEAM {
+        BIGINT id PK
+        STRING name
+        STRING owner_subject
+        BYTEA token_secret
+        TIMESTAMP token_updated_at
+        STRING token_updated_by
+        TIMESTAMP created_at
+    }
+
+    TEAM_MEMBER {
+        BIGINT id PK
+        BIGINT team_id FK
+        STRING subject
+        STRING role
+        TIMESTAMP created_at
     }
 
     BUILD_COMMENT {
@@ -133,10 +154,12 @@ erDiagram
     PROJECT ||--o{ PROJECT_BRANCH : watches
     PROJECT ||--o{ PROJECT_PULL_REQUEST : discovers
     PROJECT ||--o{ PROJECT_MEMBER : assigns
+    TEAM ||--o{ TEAM_MEMBER : includes
+    TEAM ||--o{ PROJECT : supplies
 ```
 
 * `PROJECT.owner_subject` and `BUILD.requested_by` hold the Keycloak subject (`sub`) of the user. `PROJECT_MEMBER.subject` also holds a `sub`.
-* `PROJECT_MEMBER.project_id` enforces one team row per subject per project via a unique `(project_id, subject)` index, and `PROJECT.owner_subject` is a leftover for init/compatibility; authorization uses `PROJECT_MEMBER`'s `role`, never the owner column.
+* `PROJECT_MEMBER.project_id` enforces one direct project-member row per subject per project via a unique `(project_id, subject)` index. Its `role` is the direct project role; team membership is stored separately in `TEAM_MEMBER`.
 * `BUILD.project_id` is a plain column, not a foreign key constraint.
 * `BUILD_COMMENT.author_subject` holds the `sub` of the author, the only user who may edit the comment; `updated_at` is set on edit. The author, project LEADs and admins may delete it. Comments are deleted with their build.
 * `BUILD.number` is unique within a project and taken from `PROJECT.build_counter`, which never goes back.

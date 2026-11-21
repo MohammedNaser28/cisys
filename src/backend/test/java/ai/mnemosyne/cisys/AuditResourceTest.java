@@ -40,9 +40,14 @@ import java.util.logging.Logger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
+import org.junit.jupiter.api.parallel.ResourceLock;
 
 @QuarkusTest
 @TestProfile(TeamTestProfile.class)
+@ResourceLock("audit-events")
+@Execution(ExecutionMode.SAME_THREAD)
 class AuditResourceTest {
   private static final String PATH = "/api/audit";
   private static final String JWT =
@@ -50,6 +55,7 @@ class AuditResourceTest {
 
   @BeforeEach
   void setUp() {
+    removeFailingAuditTrigger();
     clean();
     TestUserDirectory.add("admin-id", "admin", "admin");
     TestUserDirectory.add("lead-id", "lead", "lead");
@@ -73,6 +79,8 @@ class AuditResourceTest {
           Build.deleteAll();
           ProjectMember.deleteAll();
           Project.deleteAll();
+          TeamMember.deleteAll();
+          Team.deleteAll();
           Settings.deleteAll();
         });
   }
@@ -598,6 +606,81 @@ class AuditResourceTest {
   }
 
   @Test
+  @TestSecurity(user = "admin", roles = "admin")
+  @JwtSecurity(
+      claims = {
+        @Claim(key = "sub", value = "admin-id"),
+        @Claim(key = "preferred_username", value = "admin")
+      })
+  void recordsTheChosenTeamWhenAProjectIsCreated() {
+    String teamName = "audit-create-team-" + UUID.randomUUID();
+    Long teamId =
+        given()
+            .contentType("application/json")
+            .body("{\"name\":\"" + teamName + "\"}")
+            .post("/api/teams")
+            .then()
+            .statusCode(201)
+            .extract()
+            .jsonPath()
+            .getLong("id");
+    String name = "created-team-" + UUID.randomUUID();
+    given()
+        .contentType("application/json")
+        .body(
+            "{\"name\":\""
+                + name
+                + "\",\"repositoryUrl\":\"https://github.com/octocat/"
+                + name
+                + ".git\",\"privateRepository\":true,\"teamId\":"
+                + teamId
+                + "}")
+        .post("/api/projects")
+        .then()
+        .statusCode(201);
+
+    AuditEvent created = find("project.create", AuditOutcome.SUCCESS);
+    assertEquals(teamId.longValue(), ((Number) created.details.get("teamId")).longValue());
+  }
+
+  @Test
+  @TestSecurity(user = "admin", roles = "admin")
+  @JwtSecurity(
+      claims = {
+        @Claim(key = "sub", value = "admin-id"),
+        @Claim(key = "preferred_username", value = "admin")
+      })
+  void recordsOneTeamMemberRemoveForEachTeamWhenAUserIsDeleted() {
+    for (int i = 0; i < 2; i++) {
+      Long teamId =
+          given()
+              .contentType("application/json")
+              .body("{\"name\":\"delete-audit-team-" + UUID.randomUUID() + "\"}")
+              .post("/api/teams")
+              .then()
+              .statusCode(201)
+              .extract()
+              .jsonPath()
+              .getLong("id");
+      given()
+          .contentType("application/json")
+          .body("{\"username\":\"member\"}")
+          .post("/api/teams/" + teamId + "/members")
+          .then()
+          .statusCode(201);
+    }
+
+    given().delete("/api/users/member-id").then().statusCode(204);
+
+    assertEquals(2, count("team.member.remove"), "one event per removed team membership");
+    AuditEvent removed = find("team.member.remove", AuditOutcome.SUCCESS);
+    assertEquals("admin-id", removed.actorSubject, "the deleting administrator is the actor");
+    assertEquals("member-id", removed.targetId);
+    assertEquals("member", removed.targetName);
+    assertEquals("TEAM_MEMBER", removed.targetType.name());
+  }
+
+  @Test
   @TestSecurity(user = "member", roles = "member")
   @JwtSecurity(
       claims = {
@@ -825,6 +908,7 @@ class AuditResourceTest {
     } finally {
       logger.removeHandler(handler);
       QuarkusTransaction.requiringNew().run(() -> AllowedImage.deleteById(image));
+      removeFailingAuditTrigger();
     }
   }
 
@@ -1165,20 +1249,25 @@ class AuditResourceTest {
       })
   void projectCreationRollsBackWhenTheAuditInsertFails() {
     installFailingAuditTrigger();
-    String name = "atomic-" + UUID.randomUUID();
-    given()
-        .contentType("application/json")
-        .body(
-            "{\"name\":\""
-                + name
-                + "\",\"repositoryUrl\":\"https://github.com/octocat/"
-                + name
-                + ".git\"}")
-        .post("/api/projects")
-        .then()
-        .statusCode(500);
-    assertEquals(0, QuarkusTransaction.requiringNew().call(() -> Project.count("name = ?1", name)));
-    assertEquals(0, count("project.create"));
+    try {
+      String name = "atomic-" + UUID.randomUUID();
+      given()
+          .contentType("application/json")
+          .body(
+              "{\"name\":\""
+                  + name
+                  + "\",\"repositoryUrl\":\"https://github.com/octocat/"
+                  + name
+                  + ".git\"}")
+          .post("/api/projects")
+          .then()
+          .statusCode(500);
+      assertEquals(
+          0, QuarkusTransaction.requiringNew().call(() -> Project.count("name = ?1", name)));
+      assertEquals(0, count("project.create"));
+    } finally {
+      removeFailingAuditTrigger();
+    }
   }
 
   @Test
@@ -1331,6 +1420,16 @@ class AuditResourceTest {
     assertEquals(id, set.projectId);
     assertEquals(Map.of("cleared", false), set.details);
     assertFalse(set.details.toString().contains("CISYS_GIT_TEST"));
+    long afterSet = count("project.credential.update");
+
+    // Writing the same reference again is a no-op and must not add an audit event.
+    given()
+        .contentType("application/json")
+        .body("{\"credentialRef\":\"CISYS_GIT_TEST\"}")
+        .put("/api/projects/" + id + "/credential")
+        .then()
+        .statusCode(200);
+    assertEquals(afterSet, count("project.credential.update"));
 
     given()
         .contentType("application/json")
@@ -1338,6 +1437,7 @@ class AuditResourceTest {
         .put("/api/projects/" + id + "/credential")
         .then()
         .statusCode(200);
+    assertEquals(afterSet + 1, count("project.credential.update"));
     AuditEvent cleared = find("project.credential.update", AuditOutcome.SUCCESS);
     assertEquals(Map.of("cleared", true), cleared.details);
   }
@@ -1379,6 +1479,114 @@ class AuditResourceTest {
     AuditEvent removed = find("project.member.remove", AuditOutcome.SUCCESS);
     assertEquals("member-id", removed.targetId);
     assertEquals("member", removed.targetName);
+  }
+
+  @Test
+  @TestSecurity(user = "lead", roles = "lead")
+  @JwtSecurity(
+      claims = {
+        @Claim(key = "sub", value = "lead-id"),
+        @Claim(key = "preferred_username", value = "lead")
+      })
+  void recordsTeamChangesWithoutTheToken() {
+    String name = "audit-team-" + UUID.randomUUID();
+    Long teamId =
+        given()
+            .contentType("application/json")
+            .body("{\"name\":\"" + name + "\"}")
+            .post("/api/teams")
+            .then()
+            .statusCode(201)
+            .extract()
+            .jsonPath()
+            .getLong("id");
+    assertEquals(1, count("team.create"));
+    assertEquals(1, count("team.member.add"));
+
+    given()
+        .contentType("application/json")
+        .body("{\"name\":\"" + name + "-renamed\"}")
+        .put("/api/teams/" + teamId)
+        .then()
+        .statusCode(200);
+    assertEquals("TEAM", find("team.update", AuditOutcome.SUCCESS).targetType.name());
+
+    given()
+        .contentType("application/json")
+        .body("{\"username\":\"member\",\"role\":\"MEMBER\"}")
+        .post("/api/teams/" + teamId + "/members")
+        .then()
+        .statusCode(201);
+    given()
+        .contentType("application/json")
+        .body("{\"role\":\"LEAD\"}")
+        .put("/api/teams/" + teamId + "/members/member")
+        .then()
+        .statusCode(200);
+    given()
+        .contentType("application/json")
+        .body("{\"role\":\"MEMBER\"}")
+        .put("/api/teams/" + teamId + "/members/member")
+        .then()
+        .statusCode(200);
+    given().delete("/api/teams/" + teamId + "/members/member").then().statusCode(204);
+    assertTrue(count("team.member.add") >= 2);
+    assertTrue(count("team.member.role") >= 2);
+    assertEquals(1, count("team.member.remove"));
+
+    String secret = "audit-token-secret-" + UUID.randomUUID();
+    given()
+        .contentType("application/json")
+        .body("{\"token\":\"" + secret + "\"}")
+        .put("/api/teams/" + teamId + "/token")
+        .then()
+        .statusCode(200);
+    AuditEvent set = find("team.token.update", AuditOutcome.SUCCESS);
+    assertEquals(Map.of("set", true), set.details);
+    assertFalse(set.details.toString().contains(secret));
+    given().delete("/api/teams/" + teamId + "/token").then().statusCode(200);
+    AuditEvent cleared = find("team.token.update", AuditOutcome.SUCCESS);
+    assertEquals(Map.of("set", false), cleared.details);
+    assertFalse(cleared.details.toString().contains(secret));
+
+    Long projectId = project("lead-id");
+    given()
+        .contentType("application/json")
+        .body("{\"teamId\":" + teamId + "}")
+        .put("/api/projects/" + projectId + "/team-assignment")
+        .then()
+        .statusCode(200);
+    given()
+        .contentType("application/json")
+        .body("{}")
+        .put("/api/projects/" + projectId + "/team-assignment")
+        .then()
+        .statusCode(200);
+    assertEquals(2, count("project.team.update"));
+
+    // Attach again so that deleting the team has a project to detach.
+    given()
+        .contentType("application/json")
+        .body("{\"teamId\":" + teamId + "}")
+        .put("/api/projects/" + projectId + "/team-assignment")
+        .then()
+        .statusCode(200);
+    assertEquals(3, count("project.team.update"));
+
+    given().delete("/api/teams/" + teamId).then().statusCode(204);
+    AuditEvent deleted = find("team.delete", AuditOutcome.SUCCESS);
+    assertEquals("TEAM", deleted.targetType.name());
+    assertEquals("lead-id", deleted.actorSubject);
+
+    // Deleting a team writes one detachment event for each project it was attached to.
+    assertEquals(4, count("project.team.update"));
+    AuditEvent detachedEvent = find("project.team.update", AuditOutcome.SUCCESS);
+    assertEquals("PROJECT", detachedEvent.targetType.name());
+    assertEquals(String.valueOf(projectId), detachedEvent.targetId);
+    assertEquals(projectId, detachedEvent.projectId);
+    assertEquals(
+        teamId.longValue(), ((Number) detachedEvent.details.get("teamBefore")).longValue());
+    assertEquals(null, detachedEvent.details.get("teamAfter"));
   }
 
   @Test

@@ -54,6 +54,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 @ApplicationScoped
 public class RepositoryMirror {
   @Inject RepositoryUrlValidator repositoryUrls;
+  @Inject ProjectCredentials projectCredentials;
 
   @ConfigProperty(name = "cisys.poll.mirror-dir")
   String mirrorDir;
@@ -170,9 +171,9 @@ public class RepositoryMirror {
               .setRefSpecs(new RefSpec("+refs/heads/*:refs/heads/*"))
               .setRemoveDeletedRefs(true)
               .setTimeout(60);
-      UsernamePasswordCredentialsProvider credentials = credentials(project.credentialRef);
-      if (credentials != null) {
-        fetch.setCredentialsProvider(credentials);
+      String token = projectCredentials.token(project);
+      if (token != null) {
+        fetch.setCredentialsProvider(new UsernamePasswordCredentialsProvider("oauth2", token));
       }
       fetch.call();
     }
@@ -189,17 +190,6 @@ public class RepositoryMirror {
     try (Git git = Git.init().setBare(true).setDirectory(dir.toFile()).call()) {
       return Git.open(dir.toFile());
     }
-  }
-
-  private static UsernamePasswordCredentialsProvider credentials(String credentialRef) {
-    if (credentialRef == null) {
-      return null;
-    }
-    String token = System.getenv(credentialRef);
-    if (token == null || token.isBlank()) {
-      throw new IllegalStateException("Missing Git credential");
-    }
-    return new UsernamePasswordCredentialsProvider("oauth2", token);
   }
 
   /** The branch names in a mirrored project, sorted. */

@@ -53,6 +53,7 @@ import org.junit.jupiter.api.io.TempDir;
 @QuarkusTest
 class ProjectCommitResourceTest {
   @Inject RepositoryMirror mirrors;
+  @Inject CredentialCipher cipher;
 
   @TempDir Path root;
   Path source;
@@ -182,6 +183,21 @@ class ProjectCommitResourceTest {
     return project("Commits-" + UUID.randomUUID(), repo, false, null);
   }
 
+  private Seeded teamTokenProject(Path repo) {
+    Seeded seeded = project("TeamToken-" + UUID.randomUUID(), repo, true, null);
+    QuarkusTransaction.requiringNew()
+        .run(() -> {
+          Team team = new Team();
+          team.name = "commit-team-" + UUID.randomUUID();
+          team.ownerSubject = "owner-id";
+          team.createdAt = Instant.now();
+          team.persistAndFlush();
+          team.tokenSecret = cipher.encrypt("team-token", team.id);
+          Project.<Project>findById(seeded.id()).teamId = team.id;
+        });
+    return seeded;
+  }
+
   private void mirror(Seeded project) throws Exception {
     Project p = QuarkusTransaction.requiringNew().call(() -> Project.findById(project.id()));
     ReentrantLock lock = mirrors.lock(project.id());
@@ -227,6 +243,23 @@ class ProjectCommitResourceTest {
   }
 
   // --- mirror history --------------------------------------------------------------------------
+
+  @Test
+  @TestSecurity(user = "owner", roles = "lead")
+  @JwtSecurity(claims = @Claim(key = "sub", value = "owner-id"))
+  void privateTeamTokenProjectUsesItsConfiguredMirror() throws Exception {
+    source = newRepository("team-token");
+    String revision = commitAt(source, "README", "team", "team", 1_700_000_100L);
+    Seeded project = teamTokenProject(source);
+    mirror(project);
+
+    given()
+        .queryParam("branch", "main")
+        .get(path(project.name()))
+        .then()
+        .statusCode(200)
+        .body("commits.revision", contains(revision));
+  }
 
   @Test
   void anonymousReadsMirrorCommitsNewestFirst() throws Exception {

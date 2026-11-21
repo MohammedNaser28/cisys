@@ -9,10 +9,12 @@
 package ai.mnemosyne.cisys;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import io.quarkus.hibernate.orm.panache.Panache;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.security.Authenticated;
 import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.inject.Inject;
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.PersistenceException;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.BadRequestException;
@@ -21,7 +23,6 @@ import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotAuthorizedException;
-import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -53,6 +54,7 @@ public class ProjectResource {
   @Inject ProjectCache caches;
   @Inject ProjectAccess access;
   @Inject AuditService audit;
+  @Inject TeamMemberService teamMembers;
 
   private JsonWebToken token() {
     if (identity.getPrincipal() instanceof JsonWebToken jwt) {
@@ -107,7 +109,11 @@ public class ProjectResource {
 
   /** A project to create. */
   public record CreateProject(
-      String name, String repositoryUrl, boolean privateRepository, String credentialRef) {}
+      String name,
+      String repositoryUrl,
+      boolean privateRepository,
+      String credentialRef,
+      Long teamId) {}
 
   /** The new values of a project. A null {@code cache}, from an older client, keeps it. */
   public record UpdateProject(
@@ -117,33 +123,73 @@ public class ProjectResource {
       String credentialRef,
       Boolean cache) {}
 
+  /** A requested project-team assignment; null clears the project's team. */
+  public record TeamAssignment(Long teamId) {}
+
   /** A project's credential reference. */
   public record Credential(String credentialRef) {}
 
-  /**
-   * The owner's subject and the credential reference are for admins only; everyone else gets {@code
-   * owned} and no credential, so a GET response can be sent back unchanged.
-   */
+  /** The project metadata returned to callers. Credential references are for admins only. */
   public record ProjectResponse(
       Long id,
       String name,
       String repositoryUrl,
       boolean privateRepository,
+      @JsonInclude(JsonInclude.Include.NON_NULL) String effectiveRole,
       boolean owned,
       @JsonInclude(JsonInclude.Include.NON_NULL) String ownerSubject,
-      String credentialRef,
+      @JsonInclude(JsonInclude.Include.NON_NULL) String credentialRef,
+      Long teamId,
+      @JsonInclude(JsonInclude.Include.NON_NULL) String teamName,
       boolean cache) {}
 
   private ProjectResponse response(Project p) {
+    return response(p, null);
+  }
+
+  private ProjectResponse response(Project p, Map<Long, String> teamNames) {
+    boolean admin = identity.hasRole("admin");
+    String name =
+        p.teamId == null ? null : teamNames != null ? teamNames.get(p.teamId) : teamName(p.teamId);
     return new ProjectResponse(
         p.id,
         p.name,
         p.repositoryUrl,
         p.privateRepository,
+        admin ? "ADMIN" : roleName(ProjectRoles.of(p.id, subject())),
         subject().equals(p.ownerSubject),
-        identity.hasRole("admin") ? p.ownerSubject : null,
-        identity.hasRole("admin") ? p.credentialRef : null,
+        admin ? p.ownerSubject : null,
+        admin ? p.credentialRef : null,
+        p.teamId,
+        name,
         p.cache);
+  }
+
+  private static Map<Long, String> teamNames(List<Project> projects) {
+    java.util.Set<Long> ids = new java.util.HashSet<>();
+    for (Project project : projects) {
+      if (project.teamId != null) {
+        ids.add(project.teamId);
+      }
+    }
+    if (ids.isEmpty()) {
+      return Map.of();
+    }
+    Map<Long, String> names = new java.util.HashMap<>();
+    Team.<Team>list("id in ?1", ids).forEach(team -> names.put(team.id, team.name));
+    return names;
+  }
+
+  private static String teamName(Long id) {
+    if (id == null) {
+      return null;
+    }
+    Team team = Team.findById(id);
+    return team == null ? null : team.name;
+  }
+
+  private static String roleName(ProjectMember.TeamRole role) {
+    return role == null ? null : role.name();
   }
 
   /** The signed-in user's name, subject and roles. */
@@ -166,7 +212,9 @@ public class ProjectResource {
   @GET
   @Path("/projects")
   public List<ProjectResponse> list() {
-    return access.listVisible().stream().map(this::response).toList();
+    List<Project> projects = access.listVisible();
+    Map<Long, String> teamNames = teamNames(projects);
+    return projects.stream().map(p -> response(p, teamNames)).toList();
   }
 
   /** Creates a project. Leads and admins only. */
@@ -215,6 +263,7 @@ public class ProjectResource {
         && !identity.hasRole("admin")) {
       throw new ForbiddenException();
     }
+    Long teamId = teamForCreate(input.teamId());
     // Checked across all projects, including private projects the caller cannot see.
     if (Project.count("lower(name) = ?1", name.toLowerCase(Locale.ROOT)) > 0) {
       throw conflict("A project with this name already exists");
@@ -228,6 +277,7 @@ public class ProjectResource {
     p.privateRepository = input.privateRepository();
     p.ownerSubject = subject();
     p.credentialRef = credential(input.privateRepository(), input.credentialRef());
+    p.teamId = teamId;
     try {
       p.persistAndFlush();
     } catch (PersistenceException e) {
@@ -252,7 +302,8 @@ public class ProjectResource {
         AuditDetails.of(
             "name", p.name,
             "repositoryUrl", p.repositoryUrl,
-            "privateRepository", p.privateRepository));
+            "privateRepository", p.privateRepository,
+            "teamId", teamId));
     audit.success(
         AuditAction.PROJECT_MEMBER_ADD,
         AuditTargetType.PROJECT_MEMBER,
@@ -262,6 +313,68 @@ public class ProjectResource {
         "Added the project creator as LEAD",
         AuditDetails.of("role", lead.role.name(), "initial", true));
     return Response.status(201).entity(response(p)).build();
+  }
+
+  /**
+   * Changes or clears a project's team. A non-admin must be the project creator or a direct project
+   * LEAD, and must also be a LEAD of the target team to attach it. Clearing requires only the
+   * creator or direct LEAD.
+   */
+  @PUT
+  @Path("/projects/{id}/team-assignment")
+  @Transactional
+  @Audited(
+      action = AuditAction.PROJECT_TEAM_UPDATE,
+      target = AuditTargetType.PROJECT,
+      summary = "Change project team")
+  public ProjectResponse changeTeam(@PathParam("id") Long id, TeamAssignment input) {
+    Project project = access.visible(id);
+    String caller = subject();
+    boolean admin = identity.hasRole("admin");
+    boolean creator = caller.equals(project.ownerSubject);
+    boolean directLead = ProjectMember.roleOf(project.id, caller) == ProjectMember.TeamRole.LEAD;
+    if (!admin && !creator && !directLead) {
+      throw new ForbiddenException();
+    }
+    Long targetId = input == null ? null : input.teamId();
+    if (targetId == null) {
+      // The project is already managed; refresh it under the lock so a concurrent edit is seen
+      // and not overwritten by the flush below.
+      Panache.getEntityManager().refresh(project, LockModeType.PESSIMISTIC_WRITE);
+      Long previousTeam = project.teamId;
+      project.teamId = null;
+      if (!Objects.equals(previousTeam, project.teamId)) {
+        audit.success(
+            AuditAction.PROJECT_TEAM_UPDATE,
+            AuditTargetType.PROJECT,
+            project.id,
+            project.name,
+            project,
+            "Cleared the team from project " + project.name,
+            AuditDetails.of("teamBefore", previousTeam, "teamAfter", null));
+      }
+      return response(project);
+    }
+    Team target = access.visibleTeam(targetId);
+    if (!admin && TeamMember.roleOf(target.id, caller) != ProjectMember.TeamRole.LEAD) {
+      throw new ForbiddenException();
+    }
+    teamMembers.lockTeam(target);
+    // As above: refresh the already-managed project under its lock before deciding.
+    Panache.getEntityManager().refresh(project, LockModeType.PESSIMISTIC_WRITE);
+    Long previousTeam = project.teamId;
+    project.teamId = target.id;
+    if (!Objects.equals(previousTeam, project.teamId)) {
+      audit.success(
+          AuditAction.PROJECT_TEAM_UPDATE,
+          AuditTargetType.PROJECT,
+          project.id,
+          project.name,
+          project,
+          "Changed the team of project " + project.name,
+          AuditDetails.of("teamBefore", previousTeam, "teamAfter", project.teamId));
+    }
+    return response(project);
   }
 
   /** Sets or clears the read-only credential of a private project. Admins only. */
@@ -276,10 +389,8 @@ public class ProjectResource {
     if (!identity.hasRole("admin")) {
       throw new ForbiddenException();
     }
-    Project p = Project.findById(id);
-    if (p == null) {
-      throw new NotFoundException();
-    }
+    // The same row lock as update, so a concurrent edit cannot be lost.
+    Project p = lockEditable(id);
     String previous = p.credentialRef;
     p.credentialRef = credential(p.privateRepository, input == null ? null : input.credentialRef());
     if (!Objects.equals(previous, p.credentialRef)) {
@@ -297,9 +408,30 @@ public class ProjectResource {
     return response(p);
   }
 
+  /** Authorizes first, then keeps the project row locked through the mutation transaction. */
+  private Project lockEditable(Long id) {
+    // The authorization read already put the project in the persistence context; refresh under
+    // the lock so stale fields cannot drive the mutation.
+    Project p = access.editable(id);
+    Panache.getEntityManager().refresh(p, LockModeType.PESSIMISTIC_WRITE);
+    return p;
+  }
+
   /** Names the backend reads as configuration, so they cannot be project credentials. */
   private static boolean reserved(String name) {
     return RESERVED_NAMES.contains(name.toLowerCase(Locale.ROOT));
+  }
+
+  private Long teamForCreate(Long id) {
+    if (id == null) {
+      return null;
+    }
+    Team team = access.visibleTeam(id);
+    if (!identity.hasRole("admin")
+        && TeamMember.roleOf(id, subject()) != ProjectMember.TeamRole.LEAD) {
+      throw new ForbiddenException();
+    }
+    return team.id;
   }
 
   private static final Set<String> RESERVED_CREDENTIALS =
@@ -387,6 +519,8 @@ public class ProjectResource {
    * hold the LEAD role in. Safe while builds are queued or running: a build snapshots its
    * repository URL, branch, image, command and credential reference when submitted, so in-flight
    * builds keep building what was requested and edits affect only new page views and new builds.
+   * For a private project with a team token, changing the repository URL requires a LEAD of that
+   * team or a global admin; public projects and teams without a token are unaffected.
    */
   @PUT
   @Path("/projects/{id}")
@@ -398,10 +532,6 @@ public class ProjectResource {
   public Response update(@PathParam("id") Long id, UpdateProject input) {
     boolean admin = identity.hasRole("admin");
     Project p = access.editable(id);
-    String previousName = p.name;
-    String previousUrl = p.repositoryUrl;
-    boolean previousPrivate = p.privateRepository;
-    String previousCredential = p.credentialRef;
     if (input == null
         || input.name() == null
         || input.name().isBlank()
@@ -438,12 +568,48 @@ public class ProjectResource {
     if (Project.count("repositoryUrl = ?1 and id <> ?2", url, id) > 0) {
       throw conflict("A project with this repository URL already exists");
     }
+    // This first comparison uses the pre-lock read only to decide which team row to lock.
+    boolean urlChangedBeforeLock = !Objects.equals(RepositoryUrls.normalize(p.repositoryUrl), url);
+    // Team rows are locked before project rows, the order documented on TeamMemberService: take the
+    // team from this unlocked read, lock it, then lock the project and confirm it is still the
+    // same.
+    Long teamSnapshot = p.teamId;
+    Team tokenTeam = null;
+    if (!admin && urlChangedBeforeLock && p.privateRepository && teamSnapshot != null) {
+      tokenTeam = teamMembers.lockTeam(Team.findById(teamSnapshot));
+    }
+    // The project is already managed, and locking it does not refresh its fields, so re-read it
+    // under the lock. Every decision below must use the committed row, not the pre-lock read.
+    Panache.getEntityManager().refresh(p, LockModeType.PESSIMISTIC_WRITE);
+    boolean urlChanged = !Objects.equals(RepositoryUrls.normalize(p.repositoryUrl), url);
+    // The prior state for the audit is the locked row, not the read that raced the lock.
+    String previousName = p.name;
+    String previousUrl = p.repositoryUrl;
+    boolean previousPrivate = p.privateRepository;
+    String previousCredential = p.credentialRef;
+    // Authorize against the locked project. A concurrent change that attached a different team
+    // after the read above would otherwise be checked against the wrong team, so refuse and let the
+    // caller retry, which re-runs the check on fresh state.
+    if (tokenTeam != null && !tokenTeam.id.equals(p.teamId)) {
+      throw conflict("The project's team changed while saving; retry the request");
+    }
+    if (!admin && urlChanged && p.privateRepository && p.teamId != null) {
+      if (tokenTeam == null) {
+        // The unlocked read saw no team (or a public project), but the locked row needs a team
+        // check that this request never prepared for.
+        throw conflict("The project's team changed while saving; retry the request");
+      }
+      if (tokenTeam.tokenSecret != null
+          && TeamMember.roleOf(tokenTeam.id, subject()) != ProjectMember.TeamRole.LEAD) {
+        throw forbidden(
+            "Changing a private project's repository URL requires a LEAD of its team's token");
+      }
+    }
     // Only global admins set or clear credentials — LEADs must not carry one to a new repository.
     if (!admin && input.credentialRef() != null && !input.credentialRef().isBlank()) {
       throw new ForbiddenException();
     }
     // A lead must not carry the admin-set credential to a new repository.
-    boolean urlChanged = !Objects.equals(RepositoryUrls.normalize(p.repositoryUrl), url);
     p.name = name;
     p.repositoryUrl = url;
     p.privateRepository = input.privateRepository();
@@ -553,6 +719,14 @@ public class ProjectResource {
   private static WebApplicationException badRequest(String message) {
     return new WebApplicationException(
         Response.status(400)
+            .type(MediaType.APPLICATION_JSON)
+            .entity(Map.of("error", message))
+            .build());
+  }
+
+  private static WebApplicationException forbidden(String message) {
+    return new WebApplicationException(
+        Response.status(403)
             .type(MediaType.APPLICATION_JSON)
             .entity(Map.of("error", message))
             .build());

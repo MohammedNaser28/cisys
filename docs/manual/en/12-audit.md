@@ -21,13 +21,21 @@ Every event stores a snapshot of the actor, the project and the target, so the e
 
 | Action code | Recorded when |
 | :---------- | :------------ |
-| `project.create` | A project is created. |
+| `project.create` | A project is created. A team chosen at creation is recorded as the `teamId` detail of this event; it does not emit `project.team.update`. |
 | `project.update` | A project's name, repository URL or private flag changes. Details name the changed fields. |
 | `project.credential.update` | A project's Git credential reference is set, changed or cleared. Only whether it was cleared is stored (`{"cleared": true}` or `{"cleared": false}`); the reference and its value are never recorded. |
 | `project.delete` | A project is deleted. |
 | `project.member.add` | A user is assigned to a project, including the creator's initial `LEAD` row. |
 | `project.member.role` | A project member's role changes between `MEMBER` and `LEAD`. |
 | `project.member.remove` | A user is removed from a project, including when the user is deleted. |
+| `project.team.update` | A project's team is attached, changed or cleared, and once per project when its attached team is deleted. Details record the team id before the change as `teamBefore`; a cleared team has no `teamAfter`, because details with no value are not stored. |
+| `team.create` | A team is created, including the creator's initial `LEAD` membership as a separate `team.member.add` event. |
+| `team.update` | A team is renamed. Details record the name before and after. |
+| `team.delete` | A team is deleted; every project it was attached to gets a `project.team.update` event. |
+| `team.member.add` | A user is added to a team. |
+| `team.member.role` | A team member's role changes between `MEMBER` and `LEAD`. |
+| `team.member.remove` | A user is removed from a team, including when the user is deleted. |
+| `team.token.update` | A team's repository token is set, rotated or cleared. Only whether it is set (`{"set": true}` or `{"set": false}`) is stored; the token itself is never recorded. |
 | `user.create` | A user is created in Keycloak and assigned projects. |
 | `user.update` | A user's profile, role, enabled flag or project assignments change. |
 | `user.password.reset` | An administrator or scoped lead resets a user's temporary password. |

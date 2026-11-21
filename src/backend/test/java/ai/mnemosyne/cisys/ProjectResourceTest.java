@@ -22,16 +22,35 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
+import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
 import io.quarkus.test.security.jwt.Claim;
 import io.quarkus.test.security.jwt.JwtSecurity;
+import io.restassured.response.Response;
 import jakarta.inject.Inject;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.UUID;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
 class ProjectResourceTest {
   @Inject RepositoryMirror mirrors;
+  @Inject ProjectCredentials credentials;
+  @Inject CredentialCipher cipher;
+
+  @ConfigProperty(name = "quarkus.datasource.jdbc.url")
+  String jdbcUrl;
+
+  @ConfigProperty(name = "quarkus.datasource.username")
+  String jdbcUsername;
+
+  @ConfigProperty(name = "quarkus.datasource.password")
+  String jdbcPassword;
 
   @Test
   void anonymousCannotListProjects() {
@@ -645,6 +664,124 @@ class ProjectResourceTest {
   @Test
   @TestSecurity(user = "lead", roles = "lead")
   @JwtSecurity(claims = {@Claim(key = "sub", value = "lead-id")})
+  void projectLeadWhoIsOnlyATeamMemberCannotChangeAStoredTeamRepositoryUrl() {
+    Long id = project("lead-id", true);
+    Long team = team("other-lead-id", "lead-id", ProjectMember.TeamRole.MEMBER);
+    attachTeam(id, team, true);
+    String original =
+        QuarkusTransaction.requiringNew().call(() -> Project.<Project>findById(id).repositoryUrl);
+    given()
+        .contentType("application/json")
+        .body(
+            "{\"name\":\"team-url-member\",\"repositoryUrl\":\"https://github.com/org/team-url-member.git\",\"privateRepository\":true}")
+        .put("/api/projects/" + id)
+        .then()
+        .statusCode(403)
+        .body("error", containsString("LEAD of its team's token"));
+    assertEquals(
+        original,
+        QuarkusTransaction.requiringNew().call(() -> Project.<Project>findById(id).repositoryUrl));
+  }
+
+  @Test
+  @TestSecurity(user = "lead", roles = "lead")
+  @JwtSecurity(claims = {@Claim(key = "sub", value = "lead-id")})
+  void teamLeadCanChangeAStoredTeamRepositoryUrl() {
+    Long id = project("lead-id", true);
+    Long team = team("other-lead-id", "lead-id", ProjectMember.TeamRole.LEAD);
+    attachTeam(id, team, true);
+    given()
+        .contentType("application/json")
+        .body(
+            "{\"name\":\"team-url-lead\",\"repositoryUrl\":\"https://github.com/org/team-url-lead.git\",\"privateRepository\":true}")
+        .put("/api/projects/" + id)
+        .then()
+        .statusCode(200)
+        .body("repositoryUrl", equalTo("https://github.com/org/team-url-lead"));
+  }
+
+  @Test
+  @TestSecurity(user = "admin", roles = "admin")
+  @JwtSecurity(claims = {@Claim(key = "sub", value = "admin-id")})
+  void adminCanChangeAStoredTeamRepositoryUrl() {
+    Long id = project("lead-id", true);
+    Long team = team("other-lead-id", null, null);
+    attachTeam(id, team, true);
+    given()
+        .contentType("application/json")
+        .body(
+            "{\"name\":\"team-url-admin\",\"repositoryUrl\":\"https://github.com/org/team-url-admin.git\",\"privateRepository\":true}")
+        .put("/api/projects/" + id)
+        .then()
+        .statusCode(200)
+        .body("repositoryUrl", equalTo("https://github.com/org/team-url-admin"));
+  }
+
+  /**
+   * Proves the update decides from the row it locked, not from the entity loaded before the lock.
+   * The team change is committed at the exact point between the update's unlocked read and its
+   * project lock, so the request must refresh the locked row, notice the new team and answer 409
+   * instead of writing the old team back.
+   */
+  @Test
+  @TestSecurity(user = "lead", roles = "lead")
+  @JwtSecurity(claims = {@Claim(key = "sub", value = "lead-id")})
+  void aTeamChangeCommittedBeforeTheProjectLockIsDetected() throws Exception {
+    Long id = project("lead-id", true);
+    Long before = team("other-lead-id", null, null);
+    Long after = team("other-lead-id", null, null);
+    attachTeam(id, before, false);
+    String originalUrl =
+        QuarkusTransaction.requiringNew().call(() -> Project.<Project>findById(id).repositoryUrl);
+    String raced = "raced-" + UUID.randomUUID();
+    // The update locks the old team before it locks the project; change the project's team and
+    // commit just before that lock, which is after the update's unlocked read.
+    TeamMemberService concurrent =
+        new TeamMemberService() {
+          @Override
+          Team lockTeam(Team team) {
+            try (Connection db = connection();
+                PreparedStatement update =
+                    db.prepareStatement("update project set teamid = ? where id = ?")) {
+              update.setLong(1, after);
+              update.setLong(2, id);
+              assertEquals(1, update.executeUpdate());
+            } catch (SQLException e) {
+              throw new IllegalStateException(e);
+            }
+            return super.lockTeam(team);
+          }
+        };
+    QuarkusMock.installMockForType(concurrent, TeamMemberService.class);
+    Response answered =
+        given()
+            .contentType("application/json")
+            .body(
+                "{\"name\":\""
+                    + raced
+                    + "\",\"repositoryUrl\":\"https://github.com/org/"
+                    + raced
+                    + ".git\",\"privateRepository\":true}")
+            .put("/api/projects/" + id);
+    assertEquals(409, answered.statusCode(), answered.asString());
+    assertEquals(
+        "The project's team changed while saving; retry the request",
+        answered.jsonPath().getString("error"));
+    QuarkusTransaction.requiringNew()
+        .run(() -> {
+          Project stored = Project.findById(id);
+          assertEquals(after, stored.teamId, "the committed team change is kept");
+          assertEquals(originalUrl, stored.repositoryUrl, "the rejected update wrote nothing");
+        });
+  }
+
+  private Connection connection() throws SQLException {
+    return DriverManager.getConnection(jdbcUrl, jdbcUsername, jdbcPassword);
+  }
+
+  @Test
+  @TestSecurity(user = "lead", roles = "lead")
+  @JwtSecurity(claims = {@Claim(key = "sub", value = "lead-id")})
   void changingTheRepositoryUrlResetsThePollingCursors() {
     Long id = project("lead-id", false);
     QuarkusTransaction.requiringNew()
@@ -774,6 +911,79 @@ class ProjectResourceTest {
         .then()
         .statusCode(400)
         .body("error", containsString("Only private projects"));
+  }
+
+  @Test
+  @TestSecurity(user = "lead", roles = "lead")
+  @JwtSecurity(claims = {@Claim(key = "sub", value = "lead-id")})
+  void leadMakesOwnPrivateProjectPublicAndClearsTheCredential() {
+    Long id = project("lead-id", true);
+    QuarkusTransaction.requiringNew()
+        .run(() -> Project.<Project>findById(id).credentialRef = "CISYS_GIT_TEST");
+    String name = "made-public-" + java.util.UUID.randomUUID();
+    given()
+        .contentType("application/json")
+        .body(
+            "{\"name\":\""
+                + name
+                + "\",\"repositoryUrl\":\"https://github.com/org/made-public-"
+                + java.util.UUID.randomUUID()
+                + ".git\",\"privateRepository\":false}")
+        .when()
+        .put("/api/projects/" + id)
+        .then()
+        .statusCode(200)
+        .body("privateRepository", equalTo(false));
+    QuarkusTransaction.requiringNew()
+        .run(() -> {
+          Project p = Project.findById(id);
+          assertFalse(p.privateRepository, "a project LEAD may make the project public");
+          assertNull(p.credentialRef, "making the project public clears the credential");
+        });
+  }
+
+  @Test
+  @TestSecurity(user = "lead", roles = "lead")
+  @JwtSecurity(claims = {@Claim(key = "sub", value = "lead-id")})
+  void aLeadTogglingVisibilityStopsAndRestoresTheTeamToken() {
+    Long id = project("lead-id", true);
+    Long team = team("other-lead-id", null, null);
+    attachTeam(id, team, false);
+    String url = "https://github.com/org/visibility-" + java.util.UUID.randomUUID() + ".git";
+    QuarkusTransaction.requiringNew()
+        .run(() -> {
+          Project p = Project.findById(id);
+          p.repositoryUrl = url;
+          Team.<Team>findById(team).tokenSecret = cipher.encrypt("team-token", team);
+        });
+    String name = "visibility-" + java.util.UUID.randomUUID();
+    assertEquals("team-token", resolvedToken(id), "a private project uses its team's token");
+
+    given()
+        .contentType("application/json")
+        .body(
+            "{\"name\":\""
+                + name
+                + "\",\"repositoryUrl\":\""
+                + url
+                + "\",\"privateRepository\":false}")
+        .put("/api/projects/" + id)
+        .then()
+        .statusCode(200);
+    assertNull(resolvedToken(id), "a project made public by a LEAD never uses its team's token");
+
+    given()
+        .contentType("application/json")
+        .body(
+            "{\"name\":\""
+                + name
+                + "\",\"repositoryUrl\":\""
+                + url
+                + "\",\"privateRepository\":true}")
+        .put("/api/projects/" + id)
+        .then()
+        .statusCode(200);
+    assertEquals("team-token", resolvedToken(id), "made private again, it resolves the token");
   }
 
   @Test
@@ -1005,6 +1215,11 @@ class ProjectResourceTest {
     assertFalse(java.nio.file.Files.exists(dir), "the mirror is removed once the lock is free");
   }
 
+  private String resolvedToken(Long id) {
+    return QuarkusTransaction.requiringNew()
+        .call(() -> credentials.token(Project.<Project>findById(id)));
+  }
+
   private static Long project(String owner, boolean priv) {
     return QuarkusTransaction.requiringNew()
         .call(() -> {
@@ -1022,6 +1237,43 @@ class ProjectResourceTest {
           m.createdAt = java.time.Instant.now();
           m.persist();
           return p.id;
+        });
+  }
+
+  private static Long team(String owner, String member, ProjectMember.TeamRole role) {
+    return QuarkusTransaction.requiringNew()
+        .call(() -> {
+          Team team = new Team();
+          team.name = "project-team-" + java.util.UUID.randomUUID();
+          team.ownerSubject = owner;
+          team.createdAt = java.time.Instant.now();
+          team.persist();
+          TeamMember lead = new TeamMember();
+          lead.teamId = team.id;
+          lead.subject = owner;
+          lead.role = ProjectMember.TeamRole.LEAD;
+          lead.createdAt = java.time.Instant.now();
+          lead.persist();
+          if (member != null) {
+            TeamMember row = new TeamMember();
+            row.teamId = team.id;
+            row.subject = member;
+            row.role = role;
+            row.createdAt = java.time.Instant.now();
+            row.persist();
+          }
+          return team.id;
+        });
+  }
+
+  private static void attachTeam(Long projectId, Long teamId, boolean withToken) {
+    QuarkusTransaction.requiringNew()
+        .run(() -> {
+          Project project = Project.findById(projectId);
+          project.teamId = teamId;
+          if (withToken) {
+            Team.<Team>findById(teamId).tokenSecret = new byte[] {1};
+          }
         });
   }
 
@@ -1108,6 +1360,10 @@ class ProjectResourceTest {
         .run(() -> Build.<Build>findById(running).status = Build.Status.PASSED);
     given().when().delete("/api/projects/" + id).then().statusCode(204);
     assertFalse(exists(id));
+    assertEquals(
+        0,
+        QuarkusTransaction.requiringNew().call(() -> ProjectMember.count("projectId = ?1", id)),
+        "project deletion must remove direct memberships");
     given().when().delete("/api/projects/" + id).then().statusCode(404);
   }
 }

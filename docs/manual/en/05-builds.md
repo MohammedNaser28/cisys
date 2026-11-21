@@ -8,11 +8,11 @@ A **build** runs a branch's workflow, `.cisys/workflows/ci.yml`, by building a c
 
 ## Start a build
 
-Leads and admins select **Build** next to a branch on a project page. That runs the branch's workflow. A build of a private project fetches the branch with the project's credential reference; see **Private Git repositories** below.
+Project members and admins select **Build** next to a branch on a project page. That runs the branch's workflow. A build of a private project uses the resolved team or environment credential when one exists; see **Private Git repositories** below.
 
 An admin can also turn on **Automatic builds** under **Settings** → **Builds**. A timer then looks for new commits on the project's watched branches and starts a build for each; see **Automatic builds** below. Automatic builds are on by default, for the whole instance, and are only for repositories you trust.
 
-Members can view build history and logs for the projects they can access. Private projects and their logs are visible only to their creator and admins.
+Members can view build history and logs for projects they can access directly or through the project's team. Private projects and their logs are otherwise hidden with `404`.
 
 ## How a build runs
 
@@ -24,7 +24,7 @@ Members can view build history and logs for the projects they can access. Privat
 
 Build containers are limited to `BUILD_MAX_MEMORY_MIB` (`cisys.build.max-memory-mib`, default 1024) MiB of memory, `BUILD_MAX_CPUS` (`cisys.build.max-cpus`, default 1) CPU cores and `BUILD_MAX_PIDS` (`cisys.build.max-pids`, default 512) processes. All three must be positive. Admins can change them under **Settings** → **Performance** (64–65536 MiB, 1–16 cores, 16–32768 processes); saved values replace the configured ones for new builds. The process limit uses `ulimit nproc`, so it caps the processes of the unprivileged build user rather than every process in a cgroup.
 
-Build requests are stored as `QUEUED` and claimed in request order. Each accepted request gets the next build number of its project, starting at #1; numbers are not reused after builds are deleted. By default one build runs at a time. Set `BUILD_CONCURRENCY` (`cisys.build.concurrency`) to change the number of concurrent builds and `BUILD_QUEUE_LIMIT` (`cisys.build.queue-limit`, default 100) to limit waiting requests. Both limits must be positive. The image build of one build may take `BUILD_TIMEOUT_MINUTES` (`cisys.build.timeout-minutes`, default 10) minutes, which must be positive. Admins can change all three under **Settings** → **Builds** (1–16 concurrent builds, 1–1000 queued builds, a timeout of 1–1440 minutes); saved values replace the configured ones, and a new timeout applies to builds that start after it is saved. A full queue returns HTTP 429 with a clear error. Requests keep their repository URL, branch and credential reference; credentials themselves are read from the environment when execution begins.
+Build requests are stored as `QUEUED` and claimed in request order. Each accepted request gets the next build number of its project, starting at #1; numbers are not reused after builds are deleted. By default one build runs at a time. Set `BUILD_CONCURRENCY` (`cisys.build.concurrency`) to change the number of concurrent builds and `BUILD_QUEUE_LIMIT` (`cisys.build.queue-limit`, default 100) to limit waiting requests. Both limits must be positive. The image build of one build may take `BUILD_TIMEOUT_MINUTES` (`cisys.build.timeout-minutes`, default 10) minutes, which must be positive. Admins can change all three under **Settings** → **Builds** (1–16 concurrent builds, 1–1000 queued builds, a timeout of 1–1440 minutes); saved values replace the configured ones, and a new timeout applies to builds that start after it is saved. A full queue returns HTTP 429 with a clear error. Requests keep their repository URL, branch and credential reference. An environment credential is read when execution begins. A team's stored token is also resolved at execution time, so rotation affects queued builds only when the captured repository URL still matches. If the project URL changed after a build was queued, that build fails closed instead of sending the current team token to the queued URL. Clearing the team token makes a queued build use the configured environment reference, or fail if none exists.
 
 The artifacts of one build are limited to `BUILD_ARTIFACTS_MAX_MIB` (`cisys.build.artifacts.max-mib`, default 100) MiB and `BUILD_ARTIFACTS_MAX_FILES` (`cisys.build.artifacts.max-files`, default 1000) files. Admins can change both under **Settings** → **General** (1–10240 MiB, 1–100000 files). See **Artifacts** in the **Workflows** chapter.
 
@@ -40,7 +40,7 @@ Admins, the project's creator and whoever started a build can cancel it while it
 
 ## Re-run a build
 
-Project members and admins can run a finished build again with the re-run button on its build page. The new build is a manual build of the same branch and commit, with the project's current credential reference, and the page opens it. The branch's newer commits are not built. Re-running returns HTTP 409 for a build that is still queued or running, a pull request build, a build that never recorded a commit, and a build of a repository URL the project no longer uses. When the commit is no longer reachable on the branch, the new build fails at checkout.
+Project members and admins can run a finished build again with the re-run button on its build page. The new build is a manual build of the same branch and commit, with the project's current resolved credential, and the page opens it. The rerun snapshots the credential like a new build: the team's stored token when one is set, otherwise the environment reference. The branch's newer commits are not built. Re-running returns HTTP 409 for a build that is still queued or running, a pull request build, a build that never recorded a commit, and a build of a repository URL the project no longer uses. When the commit is no longer reachable on the branch, the new build fails at checkout.
 
 ## Automatic builds
 
@@ -55,7 +55,7 @@ The settings are global:
 
 The first time a branch is seen, its tip is recorded but nothing is built, so turning automatic builds on never builds a repository's history. (A branch whose tip has no workflow file has no cursor either, so the commit that adds the file is a first sighting: it is seeded, not built.) Afterwards only the commits that appeared since the last time cisys looked are queued. A commit already built by the poller, or covered by a pull request build, is skipped whatever its status and whatever branch reaches it. A manual build, whatever its status, never stops the poller, so a manual build may share a commit.
 
-All detection uses the project's own bare mirror, a fetch of every branch with forced refs and no garbage collection, so a commit a queued build still needs stays readable even after it leaves the remote. The poller and the runner support one backend instance, and `cisys.poll.mirror-dir` must be on that instance's local storage, not on storage shared by several instances. The mirror lives under `cisys.poll.mirror-dir` (`POLL_MIRROR_DIR`, default `~/.cisys/mirrors`), outside the temporary checkout directory, and is removed when the project is deleted or when both automatic builds and pull request builds are off. Its size is limited per project by `cisys.poll.mirror-max-mib` (`POLL_MIRROR_MAX_MIB`, default 4096; `0` turns the limit off); exceeding the limit stops that project's polling until the mirror is cleaned up. Private projects use the same `CISYS_GIT_*` credential reference as manual builds.
+All detection uses the project's own bare mirror, a fetch of every branch with forced refs and no garbage collection, so a commit a queued build still needs stays readable even after it leaves the remote. The poller and the runner support one backend instance, and `cisys.poll.mirror-dir` must be on that instance's local storage, not on storage shared by several instances. The mirror lives under `cisys.poll.mirror-dir` (`POLL_MIRROR_DIR`, default `~/.cisys/mirrors`), outside the temporary checkout directory, and is removed when the project is deleted or when both automatic builds and pull request builds are off. Its size is limited per project by `cisys.poll.mirror-max-mib` (`POLL_MIRROR_MAX_MIB`, default 4096; `0` turns the limit off); exceeding the limit stops that project's polling until the mirror is cleaned up. Private projects use the resolved project credential for polling.
 
 The last-seen commit of a branch moves only after a commit was queued or found to have been built, so a full build queue slows polling down instead of losing commits: the branch is retried on the next tick. A project that cannot be fetched (bad URL, host rule, authentication, network) is logged once and retried later, and one failing project never stops the tick. The build page shows **Poll** as the trigger.
 
@@ -70,7 +70,7 @@ Repository URLs use the same rules as manual builds (HTTPS, allowed hosts and po
 * Enabling the feature records the highest current pull request number as a baseline and seeds every existing pull request without building it. Only a head above the baseline, or a head that changes afterwards, is built. Turning the feature off, or on again, clears every project's cursors and baseline as part of the setting change, so re-enabling always seeds the heads that exist at that moment and never builds changes made while the feature was off. The reset does not depend on a project being idle, and branch polling is not affected.
 * Only the pull request head is built; the merge result and the intermediate commits of the branch are not tested.
 * A head is eligible only when its commit is present in the project's mirror, a local branch reaches it, and `.cisys/workflows/ci.yml` exists at that exact commit. The branch scope (**All branches** or **main or master only**) and the **Automatic builds** switch do not apply to pull request builds.
-* A pull request build checks out the exact commit from the project's mirror. If the mirror or the commit is missing, the build fails instead of fetching the repository again, and it never resolves or receives a project credential. Discovery and the mirror fetch may use the project credential, like automatic builds.
+* A pull request build checks out the exact commit from the project's mirror. If the mirror or the commit is missing, the build fails instead of fetching the repository again, and it never resolves or receives a credential. Discovery and the mirror fetch may use the resolved project credential, like automatic builds.
 * If the project already has a usable build for the same commit, whatever started it, no new pull request build is queued. A usable build is any build whose status is not `CANCELLED`, so a cancelled pull request row never hides a queued, running or finished poll or manual build. The existing build keeps its own trigger, so a poll build is not relabelled as a pull request build, and two pull requests with the same head share one build. A build that failed is not retried automatically.
 * Every successful discovery pass cancels queued pull request builds whose commit no longer belongs to any tracked, eligible pull request, whether it moved, closed, or became ineligible. The set is project-wide, so a commit shared by several pull requests is cancelled only after the last of them no longer needs it. Running, finished, poll and manual builds are left alone, and a queued build cancelled this way is queued again if its commit becomes needed later. A build cancelled by a user or admin, or one that had already started, is not revived.
 * Because only one build row may exist per project and commit, a cancelled pull request row that is not revived still covers its commit: a later pull request pointing at the same commit gets no new build until retention removes the row. This is deliberate; cisys does not override an intentional cancellation.
@@ -122,13 +122,13 @@ Only HTTPS repositories on an allowed host are accepted for builds. Redirects, e
 
 ## Private Git repositories
 
-cisys never stores a Git token. A private project names an environment variable of the backend, its **credential reference**, and the backend reads the token from that variable whenever it fetches the repository: for the branches panel, automatic builds and manual builds. The backend sends the token as the HTTPS password, with the user name `oauth2`.
+cisys supports two private-repository credential methods. An environment-variable reference names a variable such as `CISYS_GIT_ACME_APP`. Alternatively, a team LEAD or admin can enter a token for a team in Users → Teams; cisys encrypts it with AES-256-GCM using `CISYS_SECRET_KEY` and the team id as additional authenticated data, stores it on the team, and never returns it. Both methods are used for branch discovery, automatic builds and manual builds.
 
 * The variable name starts with `CISYS_GIT_`, followed by 1 to 80 capital letters, digits or underscores. The names that configure the backend, such as `CISYS_GIT_ALLOWED_HOSTS`, cannot be used.
-* Only admins can set a credential reference, and only on a private project.
-* The image build does not receive the token, so it is not stored in the image, the Dockerfile or the log, and steps cannot read it.
-* Pull request builds never use the credential; they build from the project's mirror.
-* Never include secrets in workflow files or build output.
+* Only admins can set the project environment-variable reference. Team LEADs and admins can set or clear the team token.
+* When a private validation project is supplied, cisys validates a new team token with `ls-remote` through the same URL, allowlist and resolver checks used for repository access. Without a project id, it stores the token without repository validation. The image build does not receive the token, so it is not stored in the image, Dockerfile, build row or log, and steps cannot read it.
+* Credential resolution is: per-build admin reference, team token, then project environment reference. Pull request builds never use a credential.
+* Never place secrets in workflow files or build output; each build stores its workflow file.
 
 ### Example: a private GitHub repository
 
@@ -162,7 +162,7 @@ The command lists the repository's branches, for example `… refs/heads/main`. 
 
 On GitLab, create a **project access token** instead, under the project's **Settings** → **Access tokens**, with the role **Reporter** and only the scope `read_repository`; check it the same way with the GitLab URL.
 
-**3. Give the token to the backend.** Set the variable in the environment the backend starts from, then start or restart it; a running backend does not see a variable added later. For a development setup started with `make run`:
+**3. Give the token to the backend.** For the environment-reference method, set the variable in the environment the backend starts from, then restart it. For a stored team token, open **Users** → **Teams**, select the team, and enter the token under **Repository token**; the token is write-only and is never shown again. Optionally select a private project of the team to validate the token with `ls-remote`; without it the token is stored without repository validation.
 
 ```sh
 read -rs CISYS_GIT_ACME_APP     # paste the token; it is not echoed or kept in the shell history
@@ -190,18 +190,21 @@ Then run `sudo systemctl daemon-reload && sudo systemctl restart cisys`.
 * **Project name**: `app`
 * **Repository URL**: `https://github.com/acme/app.git`
 * **Private project**: ticked; the **Credential reference** field appears
+* **Team**: select a team whose token should be used; optional
 * **Credential reference**: `CISYS_GIT_ACME_APP`, the name of the variable, not the token
 
 Then select **Add project**. For an existing project, tick **Private project** and enter the credential reference on the **General** tab of the project's settings page instead.
 
-**5. Run a build.** Open the project page. The branches panel lists the repository's branches once the backend can read it. Select **Build** next to a branch; the build page shows the commit it fetched. Add the members who should see the project on the **Team** tab of the project's settings page.
+**5. Run a build.** Open the project page. The branches panel lists the repository's branches once the backend can read it. Select **Build** next to a branch; the build page shows the commit it fetched. Add direct project members on the **Team** tab of the project's settings page.
 
 **When it fails:**
 
 * *Missing Git credential* when the branches are read, or *Build failed during checkout or container execution (IllegalStateException)* in the build log: the variable is not set, or is empty, in the backend's environment. Set it and restart the backend.
 * *Unable to read branches from the repository*, or a failed checkout in the build log, while the variable is set: the token has expired, lacks read access to **Contents**, or is waiting for the organization's approval. Run the check from step 2 again.
-* Changing the repository URL clears the credential reference, so the token is never sent to another host. An admin enters it again for the new URL.
-* To renew an expiring token, select **Regenerate token** on GitHub (or create a new one), put the new value in the variable and restart the backend; the project keeps the same reference. Delete a token on GitHub as soon as cisys no longer needs it.
+* A project URL change does not move or copy a team token. Queued builds fail closed if their captured URL no longer matches the project URL. Enter a new team token or reference for the new private repository.
+* To renew a team token, enter the new value in Users → Teams; queued builds resolve the rotated value only for the captured URL. To renew an environment token, update the backend environment and restart it. Delete a revoked token at the provider as soon as cisys no longer needs it.
+
+A queued build never uses a team token or environment-variable fallback for a different repository URL or team than the ones captured when it was queued; it fails closed. A build's snapshotted environment reference and an administrator's per-build reference are not replaced by a later project URL change. The stored-token snapshot sentinel is `@team-secret:<teamId>`.
 
 ## Images
 

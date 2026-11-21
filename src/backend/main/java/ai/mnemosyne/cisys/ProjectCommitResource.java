@@ -50,6 +50,7 @@ public class ProjectCommitResource {
 
   @Inject ProjectAccess access;
   @Inject RepositoryMirror mirrors;
+  @Inject ProjectCredentials credentials;
   @Inject EntityManager entityManager;
 
   /** A build of one commit, with only the fields the commit view links with. */
@@ -98,7 +99,7 @@ public class ProjectCommitResource {
     boolean atBoundary = skip + limit >= MAX_COMMITS;
     List<RepositoryMirror.CommitInfo> commits;
     boolean fallback;
-    if (project.privateRepository && project.credentialRef == null) {
+    if (project.privateRepository && !credentials.configured(project)) {
       // The poller never fetched this repository, so any mirror is stale or absent.
       commits = List.of();
       fallback = true;

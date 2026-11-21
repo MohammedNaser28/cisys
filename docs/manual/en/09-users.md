@@ -2,7 +2,9 @@
 
 # Users
 
-The **Users** page manages the people who use [**cisys**](https://github.com/mnemosyne-systems/cisys) and the projects they are assigned to. It is in the main menu for leads and admins. Users, passwords and roles are stored in Keycloak; cisys keeps only which projects each user is assigned to.
+The **Users** page manages the people who use [**cisys**](https://github.com/mnemosyne-systems/cisys) and the projects they are assigned to. It is in the main menu for leads and admins. Users, passwords and roles are stored in Keycloak; cisys keeps only the projects each user is assigned to and their team memberships.
+
+Team membership is managed separately on the **Teams** section under **Users**. Use that page to add, remove, or change team members and their roles.
 
 ## Admins
 

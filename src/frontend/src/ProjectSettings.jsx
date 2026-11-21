@@ -8,6 +8,7 @@
 
 import React, { useEffect, useState } from "react";
 import { Save, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
@@ -30,15 +31,20 @@ export default function ProjectSettings({
   api,
   isAdmin,
   user,
+  teams = [],
   onSaved,
   onDirtyChange,
 }) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState("general");
   const [name, setName] = useState(project.name);
   const [url, setUrl] = useState(project.repositoryUrl);
   const [priv, setPriv] = useState(project.privateRepository);
   const [credential, setCredential] = useState(project.credentialRef || "");
   const [cache, setCache] = useState(!!project.cache);
+  const [teamId, setTeamId] = useState(
+    project.teamId == null ? "" : String(project.teamId),
+  );
   // Last-saved snapshot of the repository fields; drives change detection.
   const [repoSnapshot, setRepoSnapshot] = useState({
     name: project.name,
@@ -46,6 +52,7 @@ export default function ProjectSettings({
     privateRepository: project.privateRepository,
     credential: (project.credentialRef || "").trim(),
     cache: !!project.cache,
+    teamId: project.teamId == null ? "" : String(project.teamId),
   });
   const [originalMembers, setOriginalMembers] = useState(null); // null while loading / before Team is opened
   const [draftMembers, setDraftMembers] = useState(null);
@@ -119,12 +126,13 @@ export default function ProjectSettings({
     priv !== repoSnapshot.privateRepository ||
     (isAdmin && credential.trim() !== repoSnapshot.credential) ||
     cache !== repoSnapshot.cache;
+  const teamDirty = teamId !== repoSnapshot.teamId;
   const memberPlan =
     originalMembers && draftMembers
       ? diffMembers(toMap(originalMembers), draftMembers)
       : null;
   const membersDirty = memberPlan?.changed ?? false;
-  const dirty = repoDirty || membersDirty;
+  const dirty = repoDirty || teamDirty || membersDirty;
 
   // Warn before accidentally leaving with unsaved changes.
   const dirtyRef = React.useRef(dirty);
@@ -198,13 +206,13 @@ export default function ProjectSettings({
       setOriginalMembers(fresh);
       setDraftMembers(toMap(fresh));
       setMemberLoadError("");
-      setSuccess("Team saved.");
+      setSuccess(t("settings.teamSaved"));
       setError("");
     } catch (e) {
       setError(
-        `Team changes were applied, but the member list could not be refreshed: ${
-          e?.message || "request failed"
-        }. The page may be out of date — reload to try again.`,
+        t("settings.teamRefreshedError", {
+          error: e?.message || "request failed",
+        }),
       );
     }
   }
@@ -217,19 +225,30 @@ export default function ProjectSettings({
     setSuccess("");
     if (tab === "general") {
       try {
-        const saved = await repoPut();
+        let saved = project;
+        if (repoDirty) {
+          saved = await repoPut();
+        }
+        if (teamDirty) {
+          saved = await api(`/projects/${project.id}/team-assignment`, {
+            method: "PUT",
+            body: JSON.stringify({ teamId: teamId ? Number(teamId) : null }),
+          });
+        }
         setRepoSnapshot({
           name: saved.name,
           url: saved.repositoryUrl,
           privateRepository: saved.privateRepository,
           credential: (saved.credentialRef || "").trim(),
           cache: !!saved.cache,
+          teamId: saved.teamId == null ? "" : String(saved.teamId),
         });
         setName(saved.name);
         setUrl(saved.repositoryUrl);
         setPriv(saved.privateRepository);
         setCredential(saved.credentialRef || "");
         setCache(!!saved.cache);
+        setTeamId(saved.teamId == null ? "" : String(saved.teamId));
         onSaved(saved);
       } catch (e) {
         setError(e.message || "Unable to save the project.");
@@ -297,6 +316,7 @@ export default function ProjectSettings({
       setPriv(repoSnapshot.privateRepository);
       setCredential(repoSnapshot.credential);
       setCache(repoSnapshot.cache);
+      setTeamId(repoSnapshot.teamId);
       setError("");
       return;
     }
@@ -305,7 +325,11 @@ export default function ProjectSettings({
   }
 
   const tabDirty =
-    tab === "general" ? repoDirty : tab === "team" ? membersDirty : false;
+    tab === "general"
+      ? repoDirty || teamDirty
+      : tab === "team"
+        ? membersDirty
+        : false;
 
   return (
     <main className="page-container">
@@ -353,7 +377,7 @@ export default function ProjectSettings({
       <Tabs value={tab} onValueChange={switchTab} className="settings-tabs">
         <TabsList>
           <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="team">Team</TabsTrigger>
+          <TabsTrigger value="team">{t("projects.team")}</TabsTrigger>
         </TabsList>
         <TabsContent
           value="general"
@@ -409,6 +433,26 @@ export default function ProjectSettings({
                       onChange={(e) => setPriv(e.target.checked)}
                     />
                   </span>
+                </div>
+                <div className="form-field">
+                  <Label htmlFor="settings-team">{t("projects.team")}</Label>
+                  <select
+                    id="settings-team"
+                    value={teamId}
+                    onChange={(e) => setTeamId(e.target.value)}
+                  >
+                    <option value="">{t("projects.teamNone")}</option>
+                    {teams
+                      .filter(
+                        (teamOption) => isAdmin || teamOption.role === "LEAD",
+                      )
+                      .map((teamOption) => (
+                        <option key={teamOption.id} value={teamOption.id}>
+                          {teamOption.name}
+                        </option>
+                      ))}
+                  </select>
+                  <p className="field-hint">{t("projects.teamChangeHint")}</p>
                 </div>
                 {showCredential && (
                   <div className="form-field">
