@@ -181,7 +181,7 @@ class ProjectBranchResourceTest {
         .statusCode(200)
         .body("branches", contains("dev", "main"));
     assertEquals(1, TestGitRepositoryService.calls());
-    assertEquals("CISYS_GIT_TEST", TestGitRepositoryService.credential());
+    assertEquals("test-token", TestGitRepositoryService.credential());
 
     // Clearing it falls back to the branches that already have builds.
     given()
@@ -220,7 +220,7 @@ class ProjectBranchResourceTest {
         .body("branches", contains("dev", "main"))
         .body("reason", nullValue());
     assertEquals(1, TestGitRepositoryService.calls());
-    assertEquals("CISYS_GIT_TEST", TestGitRepositoryService.credential());
+    assertEquals("test-token", TestGitRepositoryService.credential());
   }
 
   @Test

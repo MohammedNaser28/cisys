@@ -11,6 +11,7 @@ package ai.mnemosyne.cisys;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import java.time.Instant;
 
 /** A Git repository that cisys builds. */
 @Entity
@@ -30,6 +31,17 @@ public class Project extends PanacheEntity {
   /** The environment variable that holds a read-only token for a private repository. */
   @Column(length = 100)
   public String credentialRef;
+
+  /** The project's Git token encrypted with AES-GCM; null when no token is stored. */
+  @Column(columnDefinition = "bytea")
+  public byte[] credentialSecret;
+
+  /** When the stored token was last set, rotated or cleared. */
+  public Instant credentialUpdatedAt;
+
+  /** The subject that last set or rotated the stored token. */
+  @Column(length = 255)
+  public String credentialUpdatedBy;
 
   /** GITHUB or GITLAB, fixed when pull request builds are enabled. */
   @Column(length = 20)

@@ -19,6 +19,18 @@ import { diffMembers, toMap } from "./member-diff";
 
 const USERS_PAGE = 100;
 
+/** The credential state the API exposes; the token itself is never part of it. */
+function secretFields(saved) {
+  return {
+    secretSet: saved.credentialSecretSet === true,
+    secretUpdatedAt: saved.credentialUpdatedAt || null,
+  };
+}
+
+function formatWhen(value) {
+  return value ? new Date(value).toLocaleString() : "";
+}
+
 /**
  * Dedicated page for a project's settings.
  * Both tabs stage changes locally and apply them via the page Save button, reusing the
@@ -38,12 +50,17 @@ export default function ProjectSettings({
   const [url, setUrl] = useState(project.repositoryUrl);
   const [priv, setPriv] = useState(project.privateRepository);
   const [credential, setCredential] = useState(project.credentialRef || "");
+  // The write-only Git token; it is never loaded back from the server.
+  const [token, setToken] = useState("");
+  // A staged removal of the stored token, applied with the page Save button.
+  const [clearSecret, setClearSecret] = useState(false);
   // Last-saved snapshot of the repository fields; drives change detection.
   const [repoSnapshot, setRepoSnapshot] = useState({
     name: project.name,
     url: project.repositoryUrl,
     privateRepository: project.privateRepository,
     credential: (project.credentialRef || "").trim(),
+    ...secretFields(project),
   });
   const [originalMembers, setOriginalMembers] = useState(null); // null while loading / before Team is opened
   const [draftMembers, setDraftMembers] = useState(null);
@@ -116,12 +133,14 @@ export default function ProjectSettings({
     url !== repoSnapshot.url ||
     priv !== repoSnapshot.privateRepository ||
     (isAdmin && credential.trim() !== repoSnapshot.credential);
+  const tokenDirty =
+    priv && (token.trim() !== "" || (clearSecret && repoSnapshot.secretSet));
   const memberPlan =
     originalMembers && draftMembers
       ? diffMembers(toMap(originalMembers), draftMembers)
       : null;
   const membersDirty = memberPlan?.changed ?? false;
-  const dirty = repoDirty || membersDirty;
+  const dirty = repoDirty || tokenDirty || membersDirty;
 
   // Warn before accidentally leaving with unsaved changes.
   const dirtyRef = React.useRef(dirty);
@@ -140,8 +159,11 @@ export default function ProjectSettings({
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
 
-  // Only admins can set a project credential, and only a private project can have one.
-  const showCredential = isAdmin && priv;
+  // Only a private project can have a credential. The environment reference stays admin-only,
+  // while a LEAD may set the project's own write-only token.
+  const showCredential = priv;
+  const showCredentialRef = isAdmin && priv;
+  const privateLocked = !isAdmin && project.privateRepository;
 
   function switchTab(next) {
     if (next === tab) return;
@@ -208,24 +230,60 @@ export default function ProjectSettings({
     setError("");
     setSuccess("");
     if (tab === "general") {
+      let saved;
       try {
-        const saved = await repoPut();
-        setRepoSnapshot({
-          name: saved.name,
-          url: saved.repositoryUrl,
-          privateRepository: saved.privateRepository,
-          credential: (saved.credentialRef || "").trim(),
-        });
-        setName(saved.name);
-        setUrl(saved.repositoryUrl);
-        setPriv(saved.privateRepository);
-        setCredential(saved.credentialRef || "");
-        onSaved(saved);
+        saved = repoDirty ? await repoPut() : project;
       } catch (e) {
         setError(e.message || "Unable to save the project.");
-      } finally {
         setBusy(false);
+        return;
       }
+      let secret = secretFields(saved);
+      if (tokenDirty) {
+        try {
+          const updated = token.trim()
+            ? await api(`/projects/${project.id}/credential/token`, {
+                method: "PUT",
+                body: JSON.stringify({ token: token.trim() }),
+              })
+            : await api(`/projects/${project.id}/credential/token`, {
+                method: "DELETE",
+              });
+          secret = secretFields(updated);
+        } catch (e) {
+          // The repository fields are already saved; reflect that and keep the token pending so
+          // the next Save retries only the token.
+          setRepoSnapshot({
+            name: saved.name,
+            url: saved.repositoryUrl,
+            privateRepository: saved.privateRepository,
+            credential: (saved.credentialRef || "").trim(),
+            ...secret,
+          });
+          setName(saved.name);
+          setUrl(saved.repositoryUrl);
+          setPriv(saved.privateRepository);
+          setCredential(saved.credentialRef || "");
+          setError(e.message || "Unable to save the token.");
+          setBusy(false);
+          return;
+        }
+      }
+      setRepoSnapshot({
+        name: saved.name,
+        url: saved.repositoryUrl,
+        privateRepository: saved.privateRepository,
+        credential: (saved.credentialRef || "").trim(),
+        ...secret,
+      });
+      setName(saved.name);
+      setUrl(saved.repositoryUrl);
+      setPriv(saved.privateRepository);
+      setCredential(saved.credentialRef || "");
+      setToken("");
+      setClearSecret(false);
+      onSaved(saved);
+      setBusy(false);
       return;
     }
     const plan =
@@ -286,6 +344,8 @@ export default function ProjectSettings({
       setUrl(repoSnapshot.url);
       setPriv(repoSnapshot.privateRepository);
       setCredential(repoSnapshot.credential);
+      setToken("");
+      setClearSecret(false);
       setError("");
       return;
     }
@@ -294,7 +354,11 @@ export default function ProjectSettings({
   }
 
   const tabDirty =
-    tab === "general" ? repoDirty : tab === "team" ? membersDirty : false;
+    tab === "general"
+      ? repoDirty || tokenDirty
+      : tab === "team"
+        ? membersDirty
+        : false;
 
   return (
     <main className="page-container">
@@ -397,11 +461,69 @@ export default function ProjectSettings({
                       id="settings-private"
                       type="checkbox"
                       checked={priv}
-                      onChange={(e) => setPriv(e.target.checked)}
+                      disabled={privateLocked}
+                      onChange={(e) => {
+                        const next = e.target.checked;
+                        setPriv(next);
+                        if (!next) {
+                          setToken("");
+                          setClearSecret(false);
+                        }
+                      }}
                     />
                   </span>
+                  {privateLocked && (
+                    <p className="field-hint">
+                      Only a global admin can make a private project public.
+                    </p>
+                  )}
                 </div>
                 {showCredential && (
+                  <div className="form-field">
+                    <Label htmlFor="settings-token">Git token</Label>
+                    <div className="credential-token-row">
+                      <Input
+                        id="settings-token"
+                        type="password"
+                        autoComplete="new-password"
+                        spellCheck={false}
+                        value={token}
+                        onChange={(e) => {
+                          setToken(e.target.value);
+                          setClearSecret(false);
+                        }}
+                        placeholder={
+                          repoSnapshot.secretSet
+                            ? "Enter a new token to rotate it"
+                            : "Personal access token"
+                        }
+                      />
+                      {repoSnapshot.secretSet && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => {
+                            setToken("");
+                            setClearSecret((value) => !value);
+                          }}
+                        >
+                          {clearSecret ? "Keep token" : "Clear token"}
+                        </Button>
+                      )}
+                    </div>
+                    <p className="field-hint">
+                      {clearSecret
+                        ? "The stored token will be removed when you save."
+                        : repoSnapshot.secretSet
+                          ? `A token is set — last updated ${formatWhen(
+                              repoSnapshot.secretUpdatedAt,
+                            )}. It is never shown again.`
+                          : "No token is set. It is checked against the repository before it is stored and is never shown again."}
+                    </p>
+                  </div>
+                )}
+                {showCredentialRef && (
                   <div className="form-field">
                     <Label htmlFor="settings-credential">
                       Credential reference

@@ -48,6 +48,9 @@ function project(id = 1) {
     repositoryUrl: "https://github.com/org/repo",
     privateRepository: false,
     credentialRef: null,
+    credentialSecretSet: false,
+    credentialUpdatedAt: null,
+    credentialUpdatedBy: null,
   };
 }
 
@@ -123,7 +126,7 @@ function userFor() {
 }
 
 function apiMock(calls, members, opts = {}) {
-  const { postError, deleteError, putRepo, membersAfter } = opts;
+  const { postError, deleteError, putRepo, tokenError, membersAfter } = opts;
   let gets = 0;
   return vi.fn(async (path, opts = {}) => {
     const method = opts.method || "GET";
@@ -146,7 +149,26 @@ function apiMock(calls, members, opts = {}) {
     }
     if (method === "PUT" && path === "/projects/1") {
       if (putRepo) throw putRepo;
-      return { ...project(), name: bin?.name };
+      return {
+        ...project(),
+        name: bin?.name,
+        repositoryUrl: bin?.repositoryUrl,
+        privateRepository: bin?.privateRepository,
+      };
+    }
+    if (method === "PUT" && path === "/projects/1/credential/token") {
+      if (tokenError) throw tokenError;
+      return {
+        ...project(),
+        privateRepository: true,
+        credentialSecretSet: true,
+        credentialUpdatedAt: "2026-01-02T03:04:05Z",
+        credentialUpdatedBy: "lead-id",
+      };
+    }
+    if (method === "DELETE" && path === "/projects/1/credential/token") {
+      if (tokenError) throw tokenError;
+      return { ...project(), privateRepository: true };
     }
     if (method === "POST" && path === "/projects/1/team") {
       if (postError) throw postError;
@@ -408,6 +430,165 @@ describe("ProjectSettings tabs (Team save semantics)", () => {
     );
     // And there is nothing to discard or save anymore; the buttons hide.
     expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+  });
+});
+
+describe("ProjectSettings project token", () => {
+  it("lets a LEAD set a write-only token on a private project", async () => {
+    const calls = [];
+    const api = apiMock(calls, led);
+    renderUnified(api, { ...project(), privateRepository: true });
+
+    const input = screen.getByLabelText("Git token");
+    expect(input.type).toBe("password");
+    expect(input.value).toBe("");
+    expect(screen.getByText(/No token is set/)).toBeTruthy();
+    expect(screen.queryByLabelText("Credential reference")).toBeNull();
+
+    fireEvent.change(input, { target: { value: "ghp_new_token" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await vi.waitFor(() =>
+      expect(
+        calls.some(
+          ([m, p]) => m === "PUT" && p === "/projects/1/credential/token",
+        ),
+      ).toBe(true),
+    );
+    const call = calls.find(
+      ([m, p]) => m === "PUT" && p === "/projects/1/credential/token",
+    );
+    expect(call[2]).toEqual({ token: "ghp_new_token" });
+    await vi.waitFor(() =>
+      expect(screen.getByText(/A token is set/)).toBeTruthy(),
+    );
+    expect(screen.getByLabelText("Git token").value).toBe("");
+  });
+
+  it("never preloads a stored token into the field", () => {
+    renderUnified(
+      apiMock([], led),
+      {
+        ...project(),
+        privateRepository: true,
+        credentialSecretSet: true,
+        credentialUpdatedAt: "2026-01-02T03:04:05Z",
+      },
+      false,
+    );
+    expect(screen.getByLabelText("Git token").value).toBe("");
+    expect(screen.getByText(/A token is set/)).toBeTruthy();
+    expect(screen.getByText(/last updated/)).toBeTruthy();
+  });
+
+  it("stages a clear and removes the token on save", async () => {
+    const calls = [];
+    const api = apiMock(calls, led);
+    renderUnified(api, {
+      ...project(),
+      privateRepository: true,
+      credentialSecretSet: true,
+      credentialUpdatedAt: "2026-01-02T03:04:05Z",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear token" }));
+    expect(screen.getByText(/will be removed when you save/)).toBeTruthy();
+    expect(calls.some(([m]) => m === "DELETE")).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await vi.waitFor(() =>
+      expect(
+        calls.some(
+          ([m, p]) => m === "DELETE" && p === "/projects/1/credential/token",
+        ),
+      ).toBe(true),
+    );
+    await vi.waitFor(() =>
+      expect(screen.getByText(/No token is set/)).toBeTruthy(),
+    );
+  });
+
+  it("shows the last-updated time without exposing the editor", () => {
+    const target = {
+      ...project(),
+      privateRepository: true,
+      credentialSecretSet: true,
+      credentialUpdatedAt: "2026-01-02T03:04:05Z",
+      credentialUpdatedBy: "lead-id",
+    };
+    const { unmount } = renderUnified(apiMock([], led), target);
+    expect(screen.queryByText(/by lead-id/)).toBeNull();
+    expect(screen.getByText(/last updated/)).toBeTruthy();
+    unmount();
+
+    renderUnified(apiMock([], led), target, true, {
+      username: "admin",
+      subject: "admin-id",
+      roles: ["admin"],
+    });
+    expect(screen.queryByText(/by lead-id/)).toBeNull();
+    expect(screen.getByText(/last updated/)).toBeTruthy();
+    expect(screen.getByLabelText("Credential reference")).toBeTruthy();
+  });
+
+  it("keeps the repository saved and the token pending when the token fails", async () => {
+    const calls = [];
+    const tokenError = Object.assign(
+      new Error("Encryption is not configured"),
+      {
+        status: 503,
+      },
+    );
+    const api = apiMock(calls, led, { tokenError });
+    renderUnified(api, { ...project(), privateRepository: true });
+
+    fireEvent.change(screen.getByLabelText("Project name"), {
+      target: { value: "renamed" },
+    });
+    fireEvent.change(screen.getByLabelText("Git token"), {
+      target: { value: "ghp_rejected" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(
+      await screen.findByText("Encryption is not configured"),
+    ).toBeTruthy();
+    expect(calls.some(([m, p]) => m === "PUT" && p === "/projects/1")).toBe(
+      true,
+    );
+    expect(screen.getByLabelText("Git token").value).toBe("ghp_rejected");
+    // The repository rename was saved, so only the token is still dirty.
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeTruthy();
+  });
+
+  it("disables the private switch for a LEAD and explains why", () => {
+    renderUnified(apiMock([], led), {
+      ...project(),
+      privateRepository: true,
+    });
+    expect(screen.getByLabelText("Private project").disabled).toBe(true);
+    expect(
+      screen.getByText(/Only a global admin can make a private project public/),
+    ).toBeTruthy();
+  });
+
+  it("leaves the private switch enabled for an admin", () => {
+    renderUnified(
+      apiMock([], led),
+      { ...project(), privateRepository: true },
+      true,
+      { username: "admin", subject: "admin-id", roles: ["admin"] },
+    );
+    expect(screen.getByLabelText("Private project").disabled).toBe(false);
+  });
+
+  it("lets a LEAD make a public project private", () => {
+    renderUnified(apiMock([], led), project());
+    const checkbox = screen.getByLabelText("Private project");
+    expect(checkbox.disabled).toBe(false);
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(true);
+    expect(screen.getByLabelText("Git token")).toBeTruthy();
   });
 });
 

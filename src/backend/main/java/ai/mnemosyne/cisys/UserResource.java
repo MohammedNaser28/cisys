@@ -373,6 +373,8 @@ public class UserResource {
       throw new ForbiddenException();
     }
     // Shared project LEAD rule, as in ProjectAccess: the team alone grants no management.
+    // Users API scope stays on direct project memberships; group links grant no user-management
+    // scope.
     return new Caller(
         subject, false, ProjectMember.projectIds(subject, ProjectMember.TeamRole.LEAD));
   }

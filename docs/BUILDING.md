@@ -137,12 +137,23 @@ If you prefer not to use Compose, run PostgreSQL and Keycloak yourself and point
 | `DB_USER`           | `cisys`                                  | Database user                                        |
 | `DB_PASSWORD`       | `cisys`                                  | Database password                                    |
 | `CISYS_GIT_*`       | not set                                  | Read-only Git provider tokens, referenced by name from the build form |
+| `CISYS_SECRET_KEY`  | not set                                  | Base64-encoded 32-byte key for encrypted per-project Git tokens |
 | `CISYS_GIT_ALLOWED_HOSTS` | `github.com,gitlab.com`            | HTTPS hosts that may be cloned                       |
 | `CISYS_GIT_ALLOWED_PORTS` | `443`                              | Ports that may be used; keep `443` in the list       |
 | `CISYS_GIT_ALLOWED_NETWORKS` | not set                        | Private CIDR ranges that may be fetched, for a local server |
 | `CISYS_GIT_INSECURE_TLS_HOSTS` | not set                     | Hosts whose self-signed certificate is accepted      |
 
+Stored tokens are bound to their project with authenticated encryption. Changing `CISYS_SECRET_KEY` makes existing stored tokens unusable, so they must be re-entered.
+
 The runner executes repository-controlled code. Read the **Builds** chapter of the manual and [SECURITY.md](SECURITY.md) before using it.
+
+`CISYS_SECRET_KEY` must decode from base64 to exactly 32 bytes. Generate one with:
+
+```bash
+openssl rand -base64 32
+```
+
+Keep the key outside the repository and stable across restarts. The application still starts when it is missing, but stored-token writes return `503`. If it changes, existing encrypted tokens cannot be decrypted and must be re-entered. There is no key-rotation support.
 
 ## Run tests
 

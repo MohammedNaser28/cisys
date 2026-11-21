@@ -28,8 +28,8 @@ import java.util.TreeSet;
  * apply uniformly:
  *
  * <ul>
- *   <li>a project keeps at least one LEAD: removing or demoting the last one answers 409, including
- *       for global admins (as on the team API);
+ *   <li>a project keeps at least one direct LEAD: removing or demoting the last one answers 409,
+ *       including for global admins (as on the team API); group links do not count;
  *   <li>the project's creator can be demoted or removed only by a global admin.
  * </ul>
  *
@@ -59,7 +59,7 @@ public class ProjectMemberService {
     return project;
   }
 
-  /** Throws 409 when the project has no other LEAD than the one being removed or demoted. */
+  /** Throws 409 when the project has no other direct LEAD than the one being removed or demoted. */
   void requireAnotherLead(Long projectId) {
     if (ProjectMember.count("projectId = ?1 and role = ?2", projectId, TeamRole.LEAD) <= 1) {
       throw problem(409, "A project must keep at least one LEAD; add another LEAD first");
@@ -152,8 +152,9 @@ public class ProjectMemberService {
   }
 
   /**
-   * Removes every membership of {@code subject}, enforcing the last-LEAD and creator safeguards for
-   * each project. Used by admin user deletion. Deletes nothing when any check fails.
+   * Removes every project and group membership of {@code subject}, enforcing the last-LEAD and
+   * creator safeguards for each project. Used by admin user deletion. Deletes nothing when any
+   * project check fails.
    *
    * <p>Every row checked or deleted here is refreshed from the database while the lock on its
    * project is held, so a session-cached row loaded before the lock cannot drive a stale safeguard
@@ -186,6 +187,54 @@ public class ProjectMemberService {
         row.delete();
       }
     }
+    List<GroupMember> groupSnapshot = GroupMember.list("subject", subject);
+    TreeSet<Long> groupIds = new TreeSet<>();
+    groupSnapshot.forEach(m -> groupIds.add(m.groupId));
+    Map<Long, UserGroup> lockedGroups = lockGroups(groupIds);
+    for (Long groupId : groupIds) {
+      GroupMember row = currentGroupMember(groupId, subject);
+      if (row == null || !lockedGroups.containsKey(groupId)) {
+        continue;
+      }
+      if (row.role == GroupMember.GroupRole.LEAD) {
+        requireAnotherGroupLead(groupId);
+      }
+    }
+    // Group membership is independent of project access, but a group must retain a LEAD. This is
+    // in the caller's transaction, after every project and group check passed; a rejected user
+    // deletion leaves all memberships in place.
+    GroupMember.delete("subject", subject);
+  }
+
+  /** Locks groups in ascending id order before checking or deleting a user's group memberships. */
+  private static Map<Long, UserGroup> lockGroups(Collection<Long> ids) {
+    Map<Long, UserGroup> locked = new HashMap<>();
+    new TreeSet<>(ids)
+        .forEach(id -> {
+          UserGroup group = UserGroup.findById(id);
+          if (group != null) {
+            Panache.getEntityManager().lock(group, LockModeType.PESSIMISTIC_WRITE);
+            locked.put(id, group);
+          }
+        });
+    return locked;
+  }
+
+  /** Throws 409 when deleting the subject would remove the final group LEAD. */
+  private static void requireAnotherGroupLead(Long groupId) {
+    if (GroupMember.count("groupId = ?1 and role = ?2", groupId, GroupMember.GroupRole.LEAD) <= 1) {
+      throw problem(409, "A group must keep at least one LEAD; add another LEAD first");
+    }
+  }
+
+  /** Finds the subject's group row and refreshes it after the group row has been locked. */
+  private static GroupMember currentGroupMember(Long groupId, String subject) {
+    GroupMember row =
+        GroupMember.find("groupId = ?1 and subject = ?2", groupId, subject).firstResult();
+    if (row != null) {
+      Panache.getEntityManager().refresh(row);
+    }
+    return row;
   }
 
   /** Finds the subject's row in one project, refreshed from the database (defeats the L1 cache). */

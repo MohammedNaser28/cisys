@@ -143,7 +143,7 @@ class BranchResourceTest {
         .body("branches", hasSize(2))
         .body("reason", nullValue());
     assertEquals(1, TestGitRepositoryService.calls());
-    assertEquals("CISYS_GIT_TEST", TestGitRepositoryService.credential());
+    assertEquals("test-token", TestGitRepositoryService.credential());
   }
 
   @Test
@@ -157,7 +157,7 @@ class BranchResourceTest {
         .then()
         .statusCode(502)
         .body("error", equalTo("Missing Git credential"));
-    assertEquals(1, TestGitRepositoryService.calls());
+    assertEquals(0, TestGitRepositoryService.calls(), "the token is resolved before the network");
   }
 
   @Test

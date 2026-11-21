@@ -17,10 +17,12 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import ai.mnemosyne.cisys.GroupMember.GroupRole;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
@@ -58,6 +60,9 @@ class UserResourceTest {
     TestUserDirectory.reset();
     QuarkusTransaction.requiringNew()
         .run(() -> {
+          GroupMember.deleteAll();
+          GroupProject.deleteAll();
+          UserGroup.deleteAll();
           ProjectMember.deleteAll();
           Build.deleteAll();
           Project.deleteAll();
@@ -97,6 +102,44 @@ class UserResourceTest {
 
   private static boolean assigned(String subject, Long projectId) {
     return QuarkusTransaction.requiringNew().call(() -> ProjectMember.isMember(projectId, subject));
+  }
+
+  private static Long group(String name, String creator) {
+    return QuarkusTransaction.requiringNew()
+        .call(() -> {
+          UserGroup g = new UserGroup();
+          g.name = name;
+          g.createdAt = java.time.Instant.now();
+          g.persist();
+          GroupMember m = new GroupMember();
+          m.groupId = g.id;
+          m.subject = creator;
+          m.role = GroupRole.LEAD;
+          m.createdAt = java.time.Instant.now();
+          m.persist();
+          return g.id;
+        });
+  }
+
+  private static void groupMember(Long groupId, String subject, GroupRole role) {
+    QuarkusTransaction.requiringNew()
+        .run(() -> {
+          GroupMember m = new GroupMember();
+          m.groupId = groupId;
+          m.subject = subject;
+          m.role = role;
+          m.createdAt = java.time.Instant.now();
+          m.persist();
+        });
+  }
+
+  private static long groupMemberCount(Long groupId, String subject) {
+    return QuarkusTransaction.requiringNew()
+        .call(() -> GroupMember.count("groupId = ?1 and subject = ?2", groupId, subject));
+  }
+
+  private static GroupRole groupRole(Long groupId, String subject) {
+    return QuarkusTransaction.requiringNew().call(() -> GroupMember.roleOf(groupId, subject));
   }
 
   private static void assignRole(String subject, Long projectId, ProjectMember.TeamRole role) {
@@ -703,9 +746,30 @@ class UserResourceTest {
   @JwtSecurity(claims = {@Claim(key = "sub", value = "admin-id")})
   void adminDeleteOfSoleLeadFailsWith409() {
     Long project = project("delete-me-last-lead", "member-id");
+    Long group = group("delete-me-last-lead-group", "other-lead-id");
+    groupMember(group, "member-id", GroupRole.MEMBER);
     given().when().delete("/api/users/member-id").then().statusCode(409);
     assertTrue(TestUserDirectory.USERS.containsKey("member-id"));
     assertEquals(ProjectMember.TeamRole.LEAD, roleOf("member-id", project));
+    // The rejected deletion is atomic: the group membership is still there.
+    assertEquals(1, groupMemberCount(group, "member-id"));
+  }
+
+  @Test
+  @TestSecurity(user = "admin", roles = "admin")
+  @JwtSecurity(claims = {@Claim(key = "sub", value = "admin-id")})
+  void adminCannotDeleteTheLastGroupLead() {
+    Long group = group("delete-last-group-lead", "member-id");
+
+    given()
+        .when()
+        .delete("/api/users/member-id")
+        .then()
+        .statusCode(409)
+        .body("error", containsString("group must keep at least one LEAD"));
+
+    assertTrue(TestUserDirectory.USERS.containsKey("member-id"));
+    assertEquals(GroupRole.LEAD, groupRole(group, "member-id"));
   }
 
   @Test
@@ -717,5 +781,22 @@ class UserResourceTest {
     given().when().delete("/api/users/member-id").then().statusCode(204);
     assertFalse(TestUserDirectory.USERS.containsKey("member-id"));
     assertEquals(ProjectMember.TeamRole.LEAD, roleOf("other-lead-id", project));
+  }
+
+  @Test
+  @TestSecurity(user = "admin", roles = "admin")
+  @JwtSecurity(claims = {@Claim(key = "sub", value = "admin-id")})
+  void adminDeleteRemovesGroupMemberships() {
+    Long group = group("deleted-user-group", "other-lead-id");
+    groupMember(group, "member-id", GroupRole.MEMBER);
+    groupMember(group, "member2-id", GroupRole.LEAD);
+
+    given().when().delete("/api/users/member-id").then().statusCode(204);
+
+    assertEquals(0, groupMemberCount(group, "member-id"));
+    assertEquals(1, groupMemberCount(group, "member2-id"), "other members must survive");
+    assertNotNull(
+        QuarkusTransaction.requiringNew().call(() -> UserGroup.findById(group)),
+        "the group itself must survive");
   }
 }

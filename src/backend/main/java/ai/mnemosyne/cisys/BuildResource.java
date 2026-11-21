@@ -41,6 +41,7 @@ public class BuildResource {
   @Inject BuildRunner runner;
   @Inject BuildLogs logs;
   @Inject RepositoryUrlValidator repositoryUrls;
+  @Inject ProjectCredentials credentials;
   @Inject ProjectAccess access;
 
   /** The image and the commands come from the branch's {@value Workflow#PATH}. */
@@ -89,7 +90,9 @@ public class BuildResource {
         build.finishedAt,
         build.branch,
         build.image,
-        admin ? build.credentialRef : null,
+        admin && !ProjectCredentials.STORED_SECRET.equals(build.credentialRef)
+            ? build.credentialRef
+            : null,
         build.imageDigest,
         build.exitCode,
         build.logTruncated,
@@ -219,7 +222,8 @@ public class BuildResource {
       throw new BadRequestException(e.getMessage());
     }
     if (credentialRef == null && p.privateRepository) {
-      credentialRef = p.credentialRef;
+      // Snapshot the reference, never the token: a stored secret is resolved at fetch time.
+      credentialRef = credentials.snapshotRef(p);
     }
     RunRequest request = new RunRequest(input.branch(), credentialRef);
     return response(runner.submit(id, access.subject(), p.repositoryUrl, request));
@@ -227,7 +231,8 @@ public class BuildResource {
 
   /**
    * Queues a new manual build of a finished build's branch and commit. Project members (any role)
-   * and global admins. The project's current credential is used, not the one the build had.
+   * and global admins. The project's current credential is used, not the one the build had, and it
+   * is snapshotted like a new build: the stored token first, then the environment reference.
    */
   @POST
   @Path("/{buildId}/rerun")
@@ -256,7 +261,7 @@ public class BuildResource {
             access.subject(),
             p.repositoryUrl,
             b.branch,
-            p.privateRepository ? p.credentialRef : null,
+            credentials.snapshotRef(p),
             b.revision,
             Build.Trigger.MANUAL,
             null,

@@ -60,6 +60,29 @@ class BuildStatisticsResourceTest {
         });
   }
 
+  private static void groupLink(Long projectId, String subject) {
+    QuarkusTransaction.requiringNew()
+        .run(() -> {
+          UserGroup group = new UserGroup();
+          group.name = "report-group-" + UUID.randomUUID();
+          group.createdAt = Instant.now();
+          group.persistAndFlush();
+
+          GroupMember member = new GroupMember();
+          member.groupId = group.id;
+          member.subject = subject;
+          member.role = GroupMember.GroupRole.MEMBER;
+          member.createdAt = Instant.now();
+          member.persist();
+
+          GroupProject link = new GroupProject();
+          link.groupId = group.id;
+          link.projectId = projectId;
+          link.role = ProjectMember.TeamRole.LEAD;
+          link.persist();
+        });
+  }
+
   private static void build(
       Long projectId, Build.Status status, Build.Trigger trigger, String branch, Instant at) {
     QuarkusTransaction.requiringNew()
@@ -155,6 +178,19 @@ class BuildStatisticsResourceTest {
     assertFalse(s.getList("recentFailures.projectId", Double.class).contains(other.doubleValue()));
     given().get("/api/reports/builds?projectId=" + other).then().statusCode(403);
     given().get("/api/reports/builds?projectId=" + joined).then().statusCode(403);
+  }
+
+  @Test
+  @TestSecurity(user = "group-report-lead", roles = "lead")
+  @JwtSecurity(claims = {@Claim(key = "sub", value = "group-report-lead-id")})
+  void groupLinkedLeadCanSeeReportsWithoutADirectProjectRow() {
+    Long linked = project("someone-else");
+    groupLink(linked, "group-report-lead-id");
+    build(linked, Build.Status.PASSED, Build.Trigger.MANUAL, "main", Instant.now());
+
+    JsonPath s = statistics("?projectId=" + linked);
+    assertEquals(List.of(linked), projectIds(s));
+    assertEquals(1, s.getLong("totals.builds"));
   }
 
   @Test

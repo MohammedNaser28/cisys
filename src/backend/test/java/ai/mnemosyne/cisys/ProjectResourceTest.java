@@ -1062,6 +1062,10 @@ class ProjectResourceTest {
         .run(() -> Build.<Build>findById(running).status = Build.Status.PASSED);
     given().when().delete("/api/projects/" + id).then().statusCode(204);
     assertFalse(exists(id));
+    assertEquals(
+        0,
+        QuarkusTransaction.requiringNew().call(() -> ProjectMember.count("projectId = ?1", id)),
+        "project deletion must remove direct memberships");
     given().when().delete("/api/projects/" + id).then().statusCode(404);
   }
 }

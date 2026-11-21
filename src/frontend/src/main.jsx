@@ -46,6 +46,7 @@ import ImagesPanel from "./ImagesPanel";
 import SettingsPanel from "./SettingsPanel";
 import UsersPanel from "./UsersPanel";
 import BuildStatistics from "./BuildStatistics";
+import GroupsPanel from "./GroupsPanel";
 import PublicHome from "./PublicHome";
 import PublicStats from "./PublicStats";
 import ProjectBuilds from "./ProjectBuilds";
@@ -70,6 +71,11 @@ import {
   withTab,
 } from "./project-paths";
 import { buildPath } from "./build-format";
+import {
+  canBuildProject,
+  canManageProject,
+  effectiveProjectRole,
+} from "./project-roles";
 import headerLogo from "./assets/logo-header.svg";
 import "./style.css";
 
@@ -107,31 +113,17 @@ async function publicJson(path, opts = {}) {
 
 /**
  * The caller's project role, keyed by project id. Global admins short-circuit to ADMIN
- * without calling the backend; everyone else learns their role from the team list,
- * which the backend exposes to members and admins. A failed call means no rights, not a
- * relaxed gate — the server still enforces everything.
+ * without calling the backend; everyone else uses the effective role already included in each
+ * project response. The backend combines direct and group access, while the frontend only uses
+ * the result to decide which controls to render. The server still enforces every operation.
  */
-async function fetchTeamRoles(list, userInfo) {
-  if (userInfo.roles.includes("admin"))
-    return new Map(list.map((p) => [p.id, "ADMIN"]));
-  const entries = await Promise.all(
-    list.map(async (p) => {
-      try {
-        const members = await api(`/projects/${p.id}/team`);
-        const me = Array.isArray(members)
-          ? members.find(
-              (m) =>
-                m.username &&
-                m.username.toLowerCase() === userInfo.username.toLowerCase(),
-            )
-          : null;
-        return [p.id, me?.role ?? null];
-      } catch {
-        return [p.id, null];
-      }
-    }),
+async function fetchProjectRoles(list, userInfo) {
+  return new Map(
+    list.map((project) => [
+      project.id,
+      effectiveProjectRole(project, userInfo),
+    ]),
   );
-  return new Map(entries);
 }
 
 async function api(path, opts = {}) {
@@ -292,7 +284,7 @@ export function App() {
         setBranding(await api("/branding"));
         const list = await api("/projects");
         setProjects(list);
-        setTeam(await fetchTeamRoles(list, session));
+        setTeam(await fetchProjectRoles(list, session));
         setReady(true);
       } catch (e) {
         setError(e.message || "Unable to load Cisys");
@@ -479,7 +471,7 @@ export function App() {
   async function refreshProjects() {
     const list = await api("/projects");
     setProjects(list);
-    if (user) setTeam(await fetchTeamRoles(list, user));
+    if (user) setTeam(await fetchProjectRoles(list, user));
     return list;
   }
 
@@ -539,7 +531,10 @@ export function App() {
   const canEditSettings =
     settingsProject != null &&
     user != null &&
-    (user.roles.includes("admin") || team.get(settingsProject.id) === "LEAD");
+    canManageProject(
+      team.get(settingsProject.id),
+      user.roles.includes("admin"),
+    );
 
   // The settings page is for the project's LEADs and admins, like the pencil button.
   useEffect(() => {
@@ -633,11 +628,12 @@ export function App() {
   // MEMBERs only view and build. project.owned is not consulted.
   const isAdmin = user.roles.includes("admin");
   const canDelete = () => isAdmin;
-  const canEdit = (project) => isAdmin || team.get(project.id) === "LEAD";
+  const canEdit = (project) => canManageProject(team.get(project.id), isAdmin);
   const viewedProject =
     projectName !== null ? projects.find((p) => p.name === projectName) : null;
   const canStartBuilds =
-    viewedProject != null && (isAdmin || team.get(viewedProject.id) != null);
+    viewedProject != null &&
+    canBuildProject(team.get(viewedProject.id), isAdmin);
   // Only admins can set a project credential, and only a private project can have one.
   const showCredential = user.roles.includes("admin") && priv;
   const onPage = (target) =>
@@ -724,6 +720,16 @@ export function App() {
                 Reports
               </button>
             )}
+            <button
+              type="button"
+              className="nav-link"
+              aria-current={
+                projectName === null && page === "groups" ? "page" : undefined
+              }
+              onClick={() => go("groups")}
+            >
+              Groups
+            </button>
             {user.roles.includes("admin") && (
               <button
                 type="button"
@@ -856,6 +862,13 @@ export function App() {
         <UsersPanel api={api} user={user} />
       ) : page === "reports" && canCreate ? (
         <BuildStatistics load={api} onOpenBuild={openBuild} />
+      ) : page === "groups" ? (
+        <GroupsPanel
+          api={api}
+          user={user}
+          projects={projects}
+          projectRoles={team}
+        />
       ) : page === "settings" && user.roles.includes("admin") ? (
         <SettingsPanel
           api={api}

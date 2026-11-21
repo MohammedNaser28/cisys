@@ -17,6 +17,11 @@ CREATE TABLE IF NOT EXISTS project (
 );
 
 ALTER TABLE project ADD COLUMN IF NOT EXISTS credentialref character varying(100);
+-- The project's Git token, encrypted with AES-GCM; the plaintext is never stored. The updated
+-- columns are display metadata only and are cleared with the secret.
+ALTER TABLE project ADD COLUMN IF NOT EXISTS credentialsecret bytea;
+ALTER TABLE project ADD COLUMN IF NOT EXISTS credentialupdatedat timestamp(6) with time zone;
+ALTER TABLE project ADD COLUMN IF NOT EXISTS credentialupdatedby character varying(255);
 
 DO $$
 DECLARE
@@ -428,3 +433,39 @@ CREATE TABLE IF NOT EXISTS article (
 );
 CREATE INDEX IF NOT EXISTS article_updated ON article (updatedat DESC, id DESC);
 CREATE SEQUENCE IF NOT EXISTS article_seq START WITH 1 INCREMENT BY 50;
+
+-- Groups of users. A group's own role only controls who manages its membership; it grants nothing
+-- on projects. Project access comes from groupproject, whose role is what every group member gets.
+CREATE TABLE IF NOT EXISTS usergroup (
+    id bigint NOT NULL,
+    name character varying(100) NOT NULL,
+    createdat timestamp(6) with time zone NOT NULL DEFAULT now(),
+    CONSTRAINT usergroup_pkey PRIMARY KEY (id),
+    CONSTRAINT uk_usergroup_name UNIQUE (name)
+);
+CREATE SEQUENCE IF NOT EXISTS usergroup_seq START WITH 1 INCREMENT BY 50;
+
+CREATE TABLE IF NOT EXISTS groupmember (
+    id bigint NOT NULL,
+    groupid bigint NOT NULL,
+    subject character varying(255) NOT NULL,
+    role character varying(16) NOT NULL DEFAULT 'MEMBER',
+    createdat timestamp(6) with time zone NOT NULL DEFAULT now(),
+    CONSTRAINT groupmember_pkey PRIMARY KEY (id),
+    CONSTRAINT groupmember_group_subject UNIQUE (groupid, subject),
+    CONSTRAINT groupmember_group FOREIGN KEY (groupid) REFERENCES usergroup (id) ON DELETE CASCADE,
+    CONSTRAINT groupmember_role_check CHECK (role IN ('MEMBER', 'LEAD'))
+);
+CREATE INDEX IF NOT EXISTS groupmember_subject ON groupmember (subject);
+CREATE SEQUENCE IF NOT EXISTS groupmember_seq START WITH 1 INCREMENT BY 50;
+
+CREATE TABLE IF NOT EXISTS groupproject (
+    groupid bigint NOT NULL,
+    projectid bigint NOT NULL,
+    role character varying(16) NOT NULL DEFAULT 'MEMBER',
+    CONSTRAINT groupproject_pkey PRIMARY KEY (groupid, projectid),
+    CONSTRAINT groupproject_group FOREIGN KEY (groupid) REFERENCES usergroup (id) ON DELETE CASCADE,
+    CONSTRAINT groupproject_project FOREIGN KEY (projectid) REFERENCES project (id) ON DELETE CASCADE,
+    CONSTRAINT groupproject_role_check CHECK (role IN ('MEMBER', 'LEAD'))
+);
+CREATE INDEX IF NOT EXISTS groupproject_project ON groupproject (projectid);

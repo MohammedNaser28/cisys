@@ -5,7 +5,7 @@
 **Reports** sum up the builds of several projects. Open them with **Reports** in the header. They are for users with the `lead` or `admin` realm role:
 
 * **Admins** see every project.
-* **Leads** see the projects where they have a `LEAD` row. Projects where they are only a `MEMBER` are left out.
+* **Leads** see projects where they have effective project `LEAD` access, directly or through a group link. Projects where they are only a `MEMBER`, directly or through a group link, are left out.
 
 ## Filters
 
@@ -37,4 +37,4 @@ The export button downloads the same report, with the same filters, as a PDF.
 | GET | `/api/reports/builds?projectId=&period=` | The report as JSON |
 | GET | `/api/reports/builds/pdf?projectId=&period=` | The report as a PDF |
 
-`period` is `7d`, `30d`, `365d` or `all`. A `projectId` outside the caller's projects answers `403`, and so does a caller without the `lead` or `admin` role.
+`period` is `7d`, `30d`, `365d` or `all`. A `projectId` outside the caller's effective project access, direct or through a group link, answers `403`, and so does a caller without the `lead` or `admin` role.

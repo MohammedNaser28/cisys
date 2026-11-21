@@ -203,6 +203,23 @@ body {
   accent-color: var(--button-bg);
   cursor: pointer;
 }
+.private-choice input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.field-hint {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.85rem;
+}
+.credential-token-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.credential-token-row input {
+  flex: 1;
+}
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -962,6 +979,47 @@ body {
   color: #a32020;
   font-size: 0.8rem;
   margin: 0.35rem 0 0;
+}
+
+/* Groups page */
+.groups-layout {
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.8fr) minmax(0, 2fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+.groups-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.group-choice {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  color: var(--body-text);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.group-choice:hover,
+.group-choice[aria-current="true"] {
+  border-color: var(--card-border);
+  background: var(--surface-accent);
+}
+.group-detail h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+@media (max-width: 800px) {
+  .groups-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Searchable project picker (Users tab) */

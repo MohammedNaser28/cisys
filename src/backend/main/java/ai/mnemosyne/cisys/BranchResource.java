@@ -25,6 +25,7 @@ import java.util.Map;
 @Authenticated
 public class BranchResource {
   @Inject GitRepositoryService repositories;
+  @Inject ProjectCredentials credentials;
   @Inject ProjectAccess access;
 
   /** The branch names, or none and the reason, such as {@code private_repository}. */
@@ -34,7 +35,7 @@ public class BranchResource {
   @GET
   public Response list(@PathParam("projectId") Long projectId) {
     Project project = access.visible(projectId);
-    if (project.privateRepository && project.credentialRef == null) {
+    if (project.privateRepository && !credentials.configured(project)) {
       return Response.ok(new Branches(List.of(), "private_repository")).build();
     }
     try {

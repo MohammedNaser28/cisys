@@ -22,9 +22,9 @@ import java.util.Map;
 
 /**
  * Branches of a project page. Public projects read the repository. Private projects read it too
- * when the project has a credential reference; otherwise they use the branches that already have
- * builds. Anonymous callers and users without access get a 404, just like the rest of the private
- * page.
+ * when the project has a stored token or credential reference; otherwise they use the branches that
+ * already have builds. Anonymous callers and users without access get a 404, just like the rest of
+ * the private page.
  */
 @Path("/api/project-pages/{name}/branches")
 @Produces(MediaType.APPLICATION_JSON)
@@ -33,6 +33,7 @@ import java.util.Map;
 public class ProjectBranchResource {
   @Inject ProjectAccess access;
   @Inject GitRepositoryService repositories;
+  @Inject ProjectCredentials credentials;
   @Inject EntityManager entityManager;
 
   /** The branch names, or none and the reason. */
@@ -42,7 +43,7 @@ public class ProjectBranchResource {
   @GET
   public Response list(@PathParam("name") String name) {
     Project project = access.visible(name);
-    if (project.privateRepository && project.credentialRef == null) {
+    if (project.privateRepository && !credentials.configured(project)) {
       return Response.ok(new Branches(buildBranches(project), null)).build();
     }
     try {

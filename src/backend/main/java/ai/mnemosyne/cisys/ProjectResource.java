@@ -9,10 +9,12 @@
 package ai.mnemosyne.cisys;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import io.quarkus.logging.Log;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.security.Authenticated;
 import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.inject.Inject;
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.PersistenceException;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.BadRequestException;
@@ -31,6 +33,7 @@ import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.net.URI;
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -49,6 +52,8 @@ public class ProjectResource {
   @Inject SecurityIdentity identity;
   @Inject RepositoryUrlValidator repositoryUrls;
   @Inject RepositoryMirror mirrors;
+  @Inject GitRepositoryService repositories;
+  @Inject CredentialCipher cipher;
   @Inject ProjectAccess access;
 
   private JsonWebToken token() {
@@ -92,28 +97,45 @@ public class ProjectResource {
   /** A project's credential reference. */
   public record Credential(String credentialRef) {}
 
+  /** A write-only Git token for a private project. It is never returned by any endpoint. */
+  public record CredentialToken(String token) {}
+
   /**
-   * The owner's subject and the credential reference are for admins only; everyone else gets {@code
-   * owned} and no credential, so a GET response can be sent back unchanged.
+   * The owner's subject, the credential reference and the last credential editor are for admins
+   * only; everyone else gets {@code owned}, the credential state and its timestamp, so a GET
+   * response can be sent back unchanged. The token itself is never part of a response.
    */
   public record ProjectResponse(
       Long id,
       String name,
       String repositoryUrl,
       boolean privateRepository,
+      @JsonInclude(JsonInclude.Include.NON_NULL) String effectiveRole,
       boolean owned,
       @JsonInclude(JsonInclude.Include.NON_NULL) String ownerSubject,
-      String credentialRef) {}
+      @JsonInclude(JsonInclude.Include.NON_NULL) String credentialRef,
+      boolean credentialSecretSet,
+      @JsonInclude(JsonInclude.Include.NON_NULL) Instant credentialUpdatedAt,
+      @JsonInclude(JsonInclude.Include.NON_NULL) String credentialUpdatedBy) {}
 
   private ProjectResponse response(Project p) {
+    boolean admin = identity.hasRole("admin");
     return new ProjectResponse(
         p.id,
         p.name,
         p.repositoryUrl,
         p.privateRepository,
+        admin ? "ADMIN" : roleName(ProjectRoles.of(p.id, subject())),
         subject().equals(p.ownerSubject),
-        identity.hasRole("admin") ? p.ownerSubject : null,
-        identity.hasRole("admin") ? p.credentialRef : null);
+        admin ? p.ownerSubject : null,
+        admin ? p.credentialRef : null,
+        p.credentialSecret != null,
+        p.credentialUpdatedAt,
+        admin ? p.credentialUpdatedBy : null);
+  }
+
+  private static String roleName(ProjectMember.TeamRole role) {
+    return role == null ? null : role.name();
   }
 
   /** The signed-in user's name, subject and roles. */
@@ -219,12 +241,90 @@ public class ProjectResource {
     if (!identity.hasRole("admin")) {
       throw new ForbiddenException();
     }
-    Project p = Project.findById(id);
+    // The same row lock as update, setToken and clearToken, so a concurrent edit cannot be lost.
+    Project p = lockEditable(id);
+    p.credentialRef = credential(p.privateRepository, input == null ? null : input.credentialRef());
+    return response(p);
+  }
+
+  /**
+   * Sets or rotates a private project's Git token. Project LEAD or global admin only. The token is
+   * validated with an {@code ls-remote} through the same host and TLS rules as a fetch, then
+   * encrypted; a failed validation stores nothing.
+   */
+  @PUT
+  @Path("/projects/{id}/credential/token")
+  public ProjectResponse setToken(@PathParam("id") Long id, CredentialToken input) {
+    Project p = access.editable(id);
+    if (input == null || input.token() == null || input.token().isBlank()) {
+      throw badRequest("token is required");
+    }
+    if (!p.privateRepository) {
+      throw badRequest("Only private projects can use a credential");
+    }
+    try {
+      cipher.checkKey();
+    } catch (CredentialCipher.CredentialException e) {
+      throw serviceUnavailable(e.getMessage());
+    }
+    try {
+      repositories.verifyToken(p.repositoryUrl, input.token());
+    } catch (IllegalArgumentException e) {
+      throw badRequest(e.getMessage());
+    } catch (GitRepositoryService.BranchLookupException e) {
+      // The provider's message may name the repository but is not needed here; never log the token.
+      Log.warnf("Project %d: the supplied Git token was rejected", p.id);
+      throw badRequest("The token could not access the repository");
+    }
+    byte[] secret;
+    try {
+      secret = cipher.encrypt(input.token(), p.id);
+    } catch (CredentialCipher.CredentialException e) {
+      throw serviceUnavailable(e.getMessage());
+    }
+    return QuarkusTransaction.requiringNew()
+        .call(() -> {
+          Project fresh = Project.findById(id, LockModeType.PESSIMISTIC_WRITE);
+          if (fresh == null) {
+            throw new NotFoundException();
+          }
+          // The project may have changed while the token was checked; never attach a token to
+          // another repository or to a project that became public.
+          if (!fresh.privateRepository || !Objects.equals(fresh.repositoryUrl, p.repositoryUrl)) {
+            throw conflict("The project changed while the token was checked; try again");
+          }
+          fresh.credentialSecret = secret;
+          fresh.credentialUpdatedAt = Instant.now();
+          fresh.credentialUpdatedBy = subject();
+          return response(fresh);
+        });
+  }
+
+  /** Clears the stored Git token and its metadata; project LEAD or global admin only. */
+  @DELETE
+  @Path("/projects/{id}/credential/token")
+  @Transactional
+  public ProjectResponse clearToken(@PathParam("id") Long id) {
+    Project p = lockEditable(id);
+    clearSecret(p);
+    return response(p);
+  }
+
+  /** Authorizes first, then keeps the project row locked through the mutation transaction. */
+  private Project lockEditable(Long id) {
+    access.editable(id);
+    Project p = Project.findById(id, LockModeType.PESSIMISTIC_WRITE);
     if (p == null) {
       throw new NotFoundException();
     }
-    p.credentialRef = credential(p.privateRepository, input == null ? null : input.credentialRef());
-    return response(p);
+    return p;
+  }
+
+  /** Removes the encrypted token and the display metadata that goes with it. */
+  private static void clearSecret(Project p) {
+    p.credentialSecret = null;
+    p.credentialUpdatedAt = null;
+    p.credentialUpdatedBy = null;
   }
 
   /** Names the backend reads as configuration, so they cannot be project credentials. */
@@ -296,16 +396,18 @@ public class ProjectResource {
 
   /**
    * Updates a project. Admins can update any project; project LEADs can update the projects they
-   * hold the LEAD role in. Safe while builds are queued or running: a build snapshots its
-   * repository URL, branch, image, command and credential reference when submitted, so in-flight
-   * builds keep building what was requested and edits affect only new page views and new builds.
+   * hold the LEAD role in, except making one public. Safe while builds are queued or running: a
+   * build snapshots its repository URL, branch, image, command and credential reference when
+   * submitted, so in-flight builds keep building what was requested and edits affect only new page
+   * views and new builds. Changing the repository URL or making the project public clears the
+   * stored token and its metadata.
    */
   @PUT
   @Path("/projects/{id}")
   @Transactional
   public Response update(@PathParam("id") Long id, UpdateProject input) {
     boolean admin = identity.hasRole("admin");
-    Project p = access.editable(id);
+    Project p = lockEditable(id);
     if (input == null
         || input.name() == null
         || input.name().isBlank()
@@ -313,6 +415,10 @@ public class ProjectResource {
         || input.repositoryUrl() == null
         || input.repositoryUrl().length() > 2048) {
       throw new BadRequestException("Name and repository URL are required");
+    }
+    // Making a private project public is a global-admin action; check it before any mutation.
+    if (p.privateRepository && !input.privateRepository() && !admin) {
+      throw new ForbiddenException();
     }
     String name = input.name().trim();
     if (!NAME.matcher(name).matches()) {
@@ -348,13 +454,18 @@ public class ProjectResource {
     }
     // A lead must not carry the admin-set credential to a new repository.
     boolean urlChanged = !Objects.equals(RepositoryUrls.normalize(p.repositoryUrl), url);
+    boolean madePublic = p.privateRepository && !input.privateRepository();
     p.name = name;
     p.repositoryUrl = url;
     p.privateRepository = input.privateRepository();
     if (admin) {
       p.credentialRef = credential(input.privateRepository(), input.credentialRef());
-    } else if (urlChanged || !input.privateRepository()) {
+    } else if (urlChanged || madePublic) {
       p.credentialRef = null;
+    }
+    // A token belongs to one repository and to private projects only.
+    if (urlChanged || madePublic) {
+      clearSecret(p);
     }
     try {
       p.persistAndFlush();
@@ -413,6 +524,14 @@ public class ProjectResource {
   private static WebApplicationException conflict(String message) {
     return new WebApplicationException(
         Response.status(409)
+            .type(MediaType.APPLICATION_JSON)
+            .entity(Map.of("error", message))
+            .build());
+  }
+
+  private static WebApplicationException serviceUnavailable(String message) {
+    return new WebApplicationException(
+        Response.status(503)
             .type(MediaType.APPLICATION_JSON)
             .entity(Map.of("error", message))
             .build());
