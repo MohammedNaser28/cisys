@@ -46,14 +46,15 @@ describe("GeneralPanel", () => {
       ),
     );
     expect(api).toHaveBeenCalledWith("/settings/general");
+    expect(screen.getByText("Articles")).toBeTruthy();
 
     const trigger = screen.getByLabelText("Article editors");
     fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" });
     fireEvent.pointerUp(trigger, { button: 0, pointerType: "mouse" });
     fireEvent.click(await screen.findByRole("option", { name: "All users" }));
-    fireEvent.click(screen.getByLabelText("Save general settings"));
+    fireEvent.click(screen.getByLabelText("Save article settings"));
 
-    expect(await screen.findByText("General settings saved.")).toBeTruthy();
+    expect(await screen.findByText("Article settings saved.")).toBeTruthy();
     expect(api).toHaveBeenLastCalledWith("/settings/general", {
       method: "PUT",
       body: JSON.stringify({ articleEditors: "MEMBER" }),

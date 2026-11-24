@@ -13,7 +13,7 @@ import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
 import NetworkPanel from "./NetworkPanel";
-import { Card, CardContent } from "./components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./components/ui/tabs";
 import { Separator } from "./components/ui/separator";
 import PageHeader from "./components/layout/PageHeader";
@@ -79,19 +79,16 @@ const SECTIONS = {
     ],
   },
   artifacts: {
-    title: "Artifacts",
     fields: [
       {
         key: "maxSizeMib",
         id: "artifacts-size",
-        label: "Max size (MiB)",
         min: 1,
         max: 10240,
       },
       {
         key: "maxFiles",
         id: "artifacts-files",
-        label: "Max files",
         min: 1,
         max: 100000,
       },
@@ -121,7 +118,12 @@ const SECTIONS = {
   },
 };
 
-function SettingsTab({ api, section }) {
+// The artifact limits are shown on the General tab.
+const SECTION_TABS = Object.keys(SECTIONS).filter(
+  (section) => section !== "artifacts",
+);
+
+function SettingsTab({ api, section, heading }) {
   const { t } = useTranslation();
   const { fields } = SECTIONS[section];
   const title = t(`settings.sections.${section}.title`);
@@ -166,7 +168,12 @@ function SettingsTab({ api, section }) {
 
   return (
     <Card className="project-card">
-      <CardContent className="pt-6">
+      {heading && (
+        <CardHeader>
+          <CardTitle>{heading}</CardTitle>
+        </CardHeader>
+      )}
+      <CardContent className={heading ? undefined : "pt-6"}>
         {error && (
           <div className="error-message" role="alert">
             {error}
@@ -234,7 +241,7 @@ export default function SettingsPanel({ api, branding, saveBranding }) {
           <TabsTrigger value="general">
             {t("settings.tabs.general")}
           </TabsTrigger>
-          {Object.keys(SECTIONS).map((value) => (
+          {SECTION_TABS.map((value) => (
             <TabsTrigger key={value} value={value}>
               {t(`settings.sections.${value}.title`)}
             </TabsTrigger>
@@ -255,8 +262,14 @@ export default function SettingsPanel({ api, branding, saveBranding }) {
           className="data-[state=inactive]:hidden"
         >
           <GeneralPanel api={api} />
+          <Separator className="my-6" />
+          <SettingsTab
+            api={api}
+            section="artifacts"
+            heading={t("settings.sections.artifacts.heading")}
+          />
         </TabsContent>
-        {Object.keys(SECTIONS).map((value) => (
+        {SECTION_TABS.map((value) => (
           <TabsContent
             key={value}
             value={value}

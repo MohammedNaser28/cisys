@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./components/ui/select";
-import { Card, CardContent } from "./components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 
 /** Settings that are not about builds, such as who may write articles. */
 export default function GeneralPanel({ api }) {
@@ -44,7 +44,7 @@ export default function GeneralPanel({ api }) {
           body: JSON.stringify({ articleEditors: draft.articleEditors }),
         }),
       );
-      setNotice("General settings saved.");
+      setNotice("Article settings saved.");
     } catch (e) {
       setError(e.message);
     } finally {
@@ -54,7 +54,10 @@ export default function GeneralPanel({ api }) {
 
   return (
     <Card className="project-card">
-      <CardContent className="pt-6">
+      <CardHeader>
+        <CardTitle>Articles</CardTitle>
+      </CardHeader>
+      <CardContent>
         {error && (
           <div className="error-message" role="alert">
             {error}
@@ -66,7 +69,7 @@ export default function GeneralPanel({ api }) {
           </div>
         )}
         {!draft ? (
-          !error && <p role="status">Loading general settings...</p>
+          !error && <p role="status">Loading article settings...</p>
         ) : (
           <form onSubmit={submit}>
             <div className="settings-form">
@@ -94,8 +97,8 @@ export default function GeneralPanel({ api }) {
                 type="submit"
                 size="icon"
                 disabled={busy}
-                title="Save general settings"
-                aria-label="Save general settings"
+                title="Save article settings"
+                aria-label="Save article settings"
               >
                 <Save size={16} aria-hidden="true" />
               </Button>

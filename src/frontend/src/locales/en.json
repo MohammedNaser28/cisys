@@ -86,6 +86,12 @@
         "maxSizeMib": "Max size (MiB)",
         "maxFiles": "Max files"
       },
+      "artifacts": {
+        "title": "Artifact",
+        "heading": "Artifacts",
+        "maxSizeMib": "Max artifact size per build (MiB)",
+        "maxFiles": "Max artifact files per build"
+      },
       "performance": {
         "title": "Performance",
         "maxMemoryMib": "Memory limit (MiB)",
