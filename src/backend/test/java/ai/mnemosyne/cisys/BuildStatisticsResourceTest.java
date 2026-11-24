@@ -196,5 +196,14 @@ class BuildStatisticsResourceTest {
             .extract()
             .asByteArray();
     assertEquals("%PDF", new String(pdf, 0, 4, StandardCharsets.US_ASCII));
+    // The trends section embeds one rendered chart image per chart.
+    String raw = new String(pdf, StandardCharsets.ISO_8859_1);
+    int images = 0;
+    for (int at = raw.indexOf("/Subtype/Image");
+        at >= 0;
+        at = raw.indexOf("/Subtype/Image", at + 1)) {
+      images++;
+    }
+    assertTrue(images >= 6, "expected at least six chart images, found " + images);
   }
 }

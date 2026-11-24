@@ -116,6 +116,8 @@ CREATE TABLE IF NOT EXISTS settings (
 ALTER TABLE build ADD COLUMN IF NOT EXISTS requestedat timestamp(6) with time zone;
 ALTER TABLE build ADD COLUMN IF NOT EXISTS repositoryurl character varying(2048);
 CREATE INDEX IF NOT EXISTS build_queue_order ON build (requestedat, id) WHERE status = 'QUEUED';
+-- Trend reports filter and group builds by coalesce(requestedat, startedat) within a project.
+CREATE INDEX IF NOT EXISTS build_project_requested_at ON build (projectid, (coalesce(requestedat, startedat)));
 
 -- Builds run the repository's workflow file, so they no longer store a command.
 ALTER TABLE build DROP COLUMN IF EXISTS command;
