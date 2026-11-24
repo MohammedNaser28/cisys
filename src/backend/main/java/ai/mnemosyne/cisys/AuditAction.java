@@ -40,6 +40,8 @@ public enum AuditAction {
   NETWORK_HOST_UPDATE("network.host.update"),
   NETWORK_HOST_DELETE("network.host.delete"),
   NETWORK_TEMPLATE_ADD("network.template.add"),
+  REPORT_PLUGIN_SET("report.plugin.set"),
+  REPORT_PLUGIN_DELETE("report.plugin.delete"),
   ARTICLE_CREATE("article.create"),
   ARTICLE_UPDATE("article.update"),
   ARTICLE_DELETE("article.delete"),

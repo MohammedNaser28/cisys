@@ -1505,11 +1505,19 @@ public class BuildRunner {
       return;
     }
     Map<String, ReportType> types = new HashMap<>();
+    Map<String, ReportType> byClass = new HashMap<>();
     for (ReportType t : reportTypes) {
       types.put(t.type(), t);
+      byClass.put(io.quarkus.arc.ClientProxy.unwrap(t).getClass().getName(), t);
     }
+    // An admin's setting names the class that runs a type, and gives it its variables.
+    Map<String, ReportPlugin> plugins = new HashMap<>();
+    QuarkusTransaction.requiringNew()
+        .run(() -> ReportPlugin.<ReportPlugin>listAll().forEach(p -> plugins.put(p.type, p)));
     for (Map.Entry<String, List<Map<String, String>>> e : workflow.reports().entrySet()) {
-      ReportType type = types.get(e.getKey());
+      ReportPlugin plugin = plugins.get(e.getKey());
+      ReportType type = plugin == null ? types.get(e.getKey()) : byClass.get(plugin.className);
+      Map<String, String> variables = plugin == null ? Map.of() : plugin.variableMap();
       for (Map<String, String> options : e.getValue()) {
         String name = options.get("name");
         if (type == null) {
@@ -1518,7 +1526,7 @@ public class BuildRunner {
         }
         try {
           ReportType.Report report =
-              type.run(new ReportType.Context(checkout, workflow, Map.copyOf(options)));
+              type.run(new ReportType.Context(checkout, workflow, Map.copyOf(options), variables));
           if (report == null || report.format() == null || report.content() == null) {
             throw new IllegalStateException("the report type returned no content");
           }

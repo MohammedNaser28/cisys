@@ -464,3 +464,14 @@ CREATE INDEX IF NOT EXISTS auditevent_action ON auditevent (action);
 CREATE INDEX IF NOT EXISTS auditevent_project ON auditevent (projectid);
 CREATE INDEX IF NOT EXISTS auditevent_outcome ON auditevent (outcome);
 CREATE INDEX IF NOT EXISTS auditevent_target ON auditevent (targettype, targetid);
+
+-- How an admin configured a report type: the class that runs it and its variables, one key=value per line.
+CREATE TABLE IF NOT EXISTS reportplugin (
+    id bigint NOT NULL,
+    type character varying(50) NOT NULL,
+    classname character varying(255) NOT NULL,
+    variables text NOT NULL DEFAULT '',
+    CONSTRAINT reportplugin_pkey PRIMARY KEY (id),
+    CONSTRAINT reportplugin_type_key UNIQUE (type)
+);
+CREATE SEQUENCE IF NOT EXISTS reportplugin_seq START WITH 1 INCREMENT BY 50;

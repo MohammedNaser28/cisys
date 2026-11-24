@@ -25,9 +25,18 @@ public interface ReportType {
 
   /**
    * What a report runs against: the checkout, the parsed workflow and the report's own entry from
-   * the workflow, which always has a {@code name}.
+   * the workflow, which always has a {@code name}, and the variables an admin set for the type
+   * under Settings &gt; Reports.
    */
-  record Context(Path checkout, Workflow workflow, Map<String, String> options) {}
+  record Context(
+      Path checkout,
+      Workflow workflow,
+      Map<String, String> options,
+      Map<String, String> variables) {
+    public Context(Path checkout, Workflow workflow, Map<String, String> options) {
+      this(checkout, workflow, options, Map.of());
+    }
+  }
 
   /** The report's content and how the build page shows it. */
   record Report(Format format, String content) {}

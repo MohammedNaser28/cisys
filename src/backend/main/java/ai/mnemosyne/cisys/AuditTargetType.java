@@ -18,6 +18,7 @@ public enum AuditTargetType {
   IMAGE,
   NETWORK_HOST,
   NETWORK_TEMPLATE,
+  REPORT_PLUGIN,
   ARTICLE,
   BUILD
 }

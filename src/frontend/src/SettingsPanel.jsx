@@ -20,6 +20,7 @@ import BrandingPanel from "./BrandingPanel";
 import GeneralPanel from "./GeneralPanel";
 import PollingPanel from "./PollingPanel";
 import PullRequestPanel from "./PullRequestPanel";
+import ReportsPanel from "./ReportsPanel";
 
 const SECTIONS = {
   retention: {
@@ -220,6 +221,7 @@ export default function SettingsPanel({ api, branding, saveBranding }) {
               {title}
             </TabsTrigger>
           ))}
+          <TabsTrigger value="reports">Reports</TabsTrigger>
           <TabsTrigger value="network">Network</TabsTrigger>
           <TabsTrigger value="branding">Branding</TabsTrigger>
         </TabsList>
@@ -249,6 +251,13 @@ export default function SettingsPanel({ api, branding, saveBranding }) {
             )}
           </TabsContent>
         ))}
+        <TabsContent
+          value="reports"
+          forceMount
+          className="data-[state=inactive]:hidden"
+        >
+          <ReportsPanel api={api} />
+        </TabsContent>
         <TabsContent
           value="network"
           forceMount

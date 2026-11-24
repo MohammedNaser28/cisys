@@ -223,6 +223,34 @@ For a private repository, an admin starts the build with a credential reference.
 
 Never put secrets in a workflow file, because each build stores the file and shows it on the build page.
 
+## Build reports
+
+A workflow can ask for reports, which run after the jobs against the build's checkout. A report never changes the build's status: a report that fails or times out is noted in the build log and the build keeps its result. Each report is a tab on the build page, labelled with its `name`, which must be unique in the workflow. Output is kept up to 1 MiB, and a report is stopped after 10 minutes.
+
+```yaml
+reports:
+  list:
+    - name: List
+  orangu:
+    - name: Review
+      prompt: /auto_review
+```
+
+* `list` lists the workflow's dependencies and the files of the checkout.
+* `orangu` runs `orangu -p "<prompt>"` in the checkout and keeps what it prints, such as the review of `/auto_review`. `prompt` is required. The program runs on the cisys host, not in the build container, with no input.
+
+### Settings > Reports
+
+Admins set up report types under **Settings** → **Reports**: the type (the key under `reports`), the installed Java class that runs it, and its variables, one `key=value` per line. The `orangu` class takes `path`, the path to the orangu executable; without it `orangu` is looked up on the `PATH` of cisys. The path is set here and cannot be set from a workflow. A type without a setting uses the built-in class of the same name.
+
+| Method | Path | Result |
+| :----- | :--- | :----- |
+| GET | `/api/report-plugins` | The configured types and the installed classes |
+| PUT | `/api/report-plugins/{type}` | Sets the class and variables of a type |
+| DELETE | `/api/report-plugins/{type}` | Removes the setting of a type |
+
+All three are for admins. A class that is not an installed report type answers `400`.
+
 ## On the build page
 
 The build page shows the workflow file the build read, under **Workflow**, and the Dockerfile the build generated from it, under **Dockerfile** (with Docker, the preparation file comes first). A queued build shows *Not read yet* and *Not generated yet*. A build that failed before it got that far shows *None*. Entries with more than one line show only their first line; the arrow in front of it unfolds the rest. **Image** shows the full name of the base image the build found, for example `docker.io/library/alpine:3.23`.
