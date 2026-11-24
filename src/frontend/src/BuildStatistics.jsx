@@ -29,6 +29,7 @@ import PageHeader from "./components/layout/PageHeader";
 import { StatTile } from "./PublicStats";
 import TrendChart from "./TrendChart";
 import { buildPath, shortRevision, triggerLabel } from "./build-format";
+import { formatDateTime } from "./i18n";
 
 const PERIODS = [
   ["7d", "Last 7 days"],
@@ -198,9 +199,7 @@ function FlakyTable({ rows }) {
                   </td>
                   <td>{r.failures}</td>
                   <td>{r.passes}</td>
-                  <td>
-                    {r.lastAt ? new Date(r.lastAt).toLocaleString() : "—"}
-                  </td>
+                  <td>{r.lastAt ? formatDateTime(r.lastAt) : "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -285,11 +284,7 @@ function OverviewPanel({ data, loading, onOpenBuild }) {
                       <Truncated text={f.branch} />
                     </td>
                     <td>{shortRevision(f.revision)}</td>
-                    <td>
-                      {f.finishedAt
-                        ? new Date(f.finishedAt).toLocaleString()
-                        : "—"}
-                    </td>
+                    <td>{f.finishedAt ? formatDateTime(f.finishedAt) : "—"}</td>
                   </tr>
                 ))}
               </tbody>

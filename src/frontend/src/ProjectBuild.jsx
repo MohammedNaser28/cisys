@@ -36,6 +36,7 @@ import {
   startedAt,
   triggerLabel,
 } from "./build-format";
+import { formatDateTime } from "./i18n";
 
 /**
  * Text that may span several lines. More than one line is folded to its first line, with a
@@ -177,7 +178,7 @@ export default function ProjectBuild({
   }
 
   const finished = build.finishedAt
-    ? new Date(build.finishedAt).toLocaleString()
+    ? formatDateTime(build.finishedAt)
     : "Not finished";
 
   return (

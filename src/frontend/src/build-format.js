@@ -6,6 +6,8 @@
  *   OF THE PROGRAM CONSTITUTES RECIPIENT'S ACCEPTANCE OF THIS AGREEMENT.
  */
 
+import { formatDateTime } from "./i18n";
+
 /** Segment used in build URLs when the build has no branch. Git branch names cannot contain "~". */
 const NO_BRANCH = "~";
 
@@ -57,7 +59,5 @@ export function triggerLabel(trigger, provider) {
 }
 
 export function startedAt(build) {
-  return build.startedAt
-    ? new Date(build.startedAt).toLocaleString()
-    : "Not started";
+  return build.startedAt ? formatDateTime(build.startedAt) : "Not started";
 }

@@ -93,6 +93,18 @@ See [SECURITY.md](SECURITY.md) for the role-to-endpoint mapping.
 | `compose.yaml`                           | Local PostgreSQL and Keycloak                   |
 | `.github/workflows`                      | CI: backend tests, frontend lint and build      |
 
+## Translations
+
+The user interface uses [i18next](https://www.i18next.com/) with [react-i18next](https://react.i18next.com/). English is the reference language.
+
+* Strings live in `src/frontend/src/locales/<locale>.json`, keyed by area, for example `projects.add`. Components use `const { t } = useTranslation()` and `t("projects.add")`; code outside React uses `i18n.t(...)` from `src/frontend/src/i18n.js`.
+* Plurals use the `_one` / `_other` suffixes and `t("projects.count", { count })`.
+* Dates and numbers go through `formatDate`, `formatDateTime`, `formatNumber` and `relativeTimeFormat` from `i18n.js`, so they follow the UI language rather than the browser default.
+* The manual is read from `docs/manual/<locale>/`, falling back to `docs/manual/en/`.
+* The Keycloak login theme has its own catalogs in `contrib/keycloak/themes/cisys/login/messages/`.
+
+To add a language, copy `en.json` to `<locale>.json` and translate the values; it is picked up automatically and chosen from the browser language. Missing keys fall back to English.
+
 ## Logging levels
 
 | Level | Description |

@@ -11,6 +11,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Textarea } from "./components/ui/textarea";
+import { formatDateTime } from "./i18n";
 
 /** Comments on a build; members may add one, authors may edit theirs, and authors, leads and admins may delete. */
 export default function BuildComments({
@@ -103,7 +104,7 @@ export default function BuildComments({
               <li key={c.id} className="comment-row">
                 <div className="comment-meta">
                   <span className="comment-author">{c.author}</span>
-                  <span>{new Date(c.createdAt).toLocaleString()}</span>
+                  <span>{formatDateTime(c.createdAt)}</span>
                   {c.updatedAt && <span>(edited)</span>}
                   {c.mine && canComment && editing !== c.id && (
                     <Button

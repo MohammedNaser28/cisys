@@ -16,6 +16,7 @@ import {
   useNavigate,
 } from "react-router-dom";
 import Keycloak from "keycloak-js";
+import { useTranslation } from "react-i18next";
 import {
   FolderGit2,
   LockKeyhole,
@@ -77,6 +78,7 @@ import {
 import { buildPath } from "./build-format";
 import { resolveConfig } from "./app-config";
 import headerLogo from "./assets/logo-header.svg";
+import i18n from "./i18n";
 import "./style.css";
 
 const { apiUrl: API, keycloakUrl, realm, clientId } = resolveConfig();
@@ -100,8 +102,8 @@ async function publicJson(path, opts = {}) {
     const message =
       body?.error ||
       (response.status === 429
-        ? "Too many requests. Try again later."
-        : `Request failed (${response.status})`);
+        ? i18n.t("errors.tooManyRequests")
+        : i18n.t("errors.requestFailed", { status: response.status }));
     throw Object.assign(new Error(message), {
       status: response.status,
       retryAfter: Number(response.headers.get("Retry-After")) || null,
@@ -146,7 +148,7 @@ async function api(path, opts = {}) {
   } catch {
     // The session is gone, for example because the application was restarted.
     await keycloak.login();
-    throw new Error("Your session has ended. Please sign in again.");
+    throw new Error(i18n.t("errors.sessionEnded"));
   }
   const response = await fetch(API + path, {
     ...opts,
@@ -168,8 +170,8 @@ async function api(path, opts = {}) {
     throw Object.assign(
       new Error(
         response.status === 429
-          ? "The build queue is full. Try again later."
-          : `Request failed (${response.status}). Check the branch and project access.`,
+          ? i18n.t("errors.queueFull")
+          : i18n.t("errors.requestFailedAccess", { status: response.status }),
       ),
       {
         status: response.status,
@@ -198,6 +200,7 @@ function AppPage() {
   const [submitting, setSubmitting] = useState(false);
   const [branding, setBranding] = useState(null);
   const [settingsDirty, setSettingsDirty] = useState(false);
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const route = useMemo(
@@ -257,7 +260,7 @@ function AppPage() {
       setStatsError("");
     } catch {
       setStats(null);
-      setStatsError("Statistics are unavailable right now.");
+      setStatsError(i18n.t("app.statsUnavailable"));
     }
   }, []);
 
@@ -280,7 +283,7 @@ function AppPage() {
         setTeam(await fetchTeamRoles(list, session));
         setReady(true);
       } catch (e) {
-        setError(e.message || "Unable to load Cisys");
+        setError(e.message || i18n.t("app.loadFailed"));
       }
     };
     keycloak
@@ -302,10 +305,7 @@ function AppPage() {
   );
   useEffect(() => {
     if (blocker.state !== "blocked") return;
-    if (
-      !submitting &&
-      window.confirm("You have unsaved changes. Leave anyway?")
-    )
+    if (!submitting && window.confirm(i18n.t("app.unsavedChanges")))
       blocker.proceed();
     else blocker.reset();
   }, [blocker, submitting]);
@@ -405,11 +405,7 @@ function AppPage() {
 
   async function deleteProject(project) {
     if (submitting) return;
-    if (
-      !window.confirm(
-        `Delete ${project.name} and all of its builds? This cannot be undone.`,
-      )
-    )
+    if (!window.confirm(t("projects.deleteConfirm", { name: project.name })))
       return;
     setError("");
     try {
@@ -524,7 +520,7 @@ function AppPage() {
   if (!ready)
     return (
       <main className="loading-state" role={error ? "alert" : "status"}>
-        {error || "Connecting to Cisys…"}
+        {error || t("app.connecting")}
       </main>
     );
   const canCreate = user.roles.includes("lead") || user.roles.includes("admin");
@@ -543,10 +539,10 @@ function AppPage() {
   const showCredential = user.roles.includes("admin") && priv;
   const onPage = (target) => page === target;
   const role = user.roles.includes("admin")
-    ? "Admin"
+    ? t("roles.admin")
     : user.roles.includes("lead")
-      ? "Lead"
-      : "Member";
+      ? t("roles.lead")
+      : t("roles.member");
 
   return (
     <div
@@ -566,7 +562,7 @@ function AppPage() {
           <a
             className="brand"
             href={pagePath("home")}
-            aria-label={`${branding.name} home`}
+            aria-label={t("app.home", { name: branding.name })}
             onClick={(event) => {
               event.preventDefault();
               go("home");
@@ -582,14 +578,14 @@ function AppPage() {
             />
             <span>{branding.name}</span>
           </a>
-          <nav aria-label="Primary">
+          <nav aria-label={t("nav.primary")}>
             <button
               type="button"
               className="nav-link"
               aria-current={onPage("projects") ? "page" : undefined}
               onClick={() => go("projects")}
             >
-              Projects
+              {t("nav.projects")}
             </button>
             {user.roles.includes("admin") && (
               <button
@@ -598,7 +594,7 @@ function AppPage() {
                 aria-current={onPage("images") ? "page" : undefined}
                 onClick={() => go("images")}
               >
-                Images
+                {t("nav.images")}
               </button>
             )}
             {canManageUsers && (
@@ -608,7 +604,7 @@ function AppPage() {
                 aria-current={onPage("users") ? "page" : undefined}
                 onClick={() => go("users")}
               >
-                Users
+                {t("nav.users")}
               </button>
             )}
             {user.roles.includes("admin") && (
@@ -618,7 +614,7 @@ function AppPage() {
                 aria-current={onPage("audit") ? "page" : undefined}
                 onClick={() => go("audit")}
               >
-                Audit
+                {t("nav.audit")}
               </button>
             )}
             {canCreate && (
@@ -628,7 +624,7 @@ function AppPage() {
                 aria-current={onPage("reports") ? "page" : undefined}
                 onClick={() => go("reports")}
               >
-                Reports
+                {t("nav.reports")}
               </button>
             )}
             {user.roles.includes("admin") && (
@@ -638,7 +634,7 @@ function AppPage() {
                 aria-current={onPage("settings") ? "page" : undefined}
                 onClick={() => go("settings")}
               >
-                Settings
+                {t("nav.settings")}
               </button>
             )}
           </nav>
@@ -656,9 +652,9 @@ function AppPage() {
             type="button"
             className="theme-toggle"
             onClick={() => setDark(!dark)}
-            aria-label="Toggle dark mode"
+            aria-label={t("nav.toggleDarkMode")}
             aria-pressed={dark}
-            title="Toggle dark mode"
+            title={t("nav.toggleDarkMode")}
           >
             <Sun size={15} aria-hidden="true" />
             <Moon size={15} aria-hidden="true" />
@@ -669,8 +665,8 @@ function AppPage() {
               <button
                 type="button"
                 className="user-menu-trigger"
-                aria-label="Account menu"
-                title="Account menu"
+                aria-label={t("nav.accountMenu")}
+                title={t("nav.accountMenu")}
               >
                 <CircleUserRound size={22} aria-hidden="true" />
                 <ChevronDown size={14} aria-hidden="true" />
@@ -678,14 +674,14 @@ function AppPage() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={() => go("profile")}>
-                <UserRound aria-hidden="true" /> Profile
+                <UserRound aria-hidden="true" /> {t("nav.profile")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() =>
                   keycloak.logout({ redirectUri: window.location.origin + "/" })
                 }
               >
-                <LogOut aria-hidden="true" /> Sign out
+                <LogOut aria-hidden="true" /> {t("nav.signOut")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -749,11 +745,13 @@ function AppPage() {
         </main>
       ) : page === "profile" ? (
         <main id="profile" className="page-container">
-          <PageHeader title="Profile" />
+          <PageHeader title={t("profile.title")} />
           <Card className="project-card">
             <CardHeader>
               <CardTitle>{role}</CardTitle>
-              <CardDescription>Signed in as {user.username}</CardDescription>
+              <CardDescription>
+                {t("profile.signedInAs", { username: user.username })}
+              </CardDescription>
             </CardHeader>
           </Card>
         </main>
@@ -781,11 +779,10 @@ function AppPage() {
       ) : (
         <main id="projects" className="page-container">
           <PageHeader
-            title="Projects"
+            title={t("projects.title")}
             actions={
               <Badge variant="outline">
-                {projects.length}{" "}
-                {projects.length === 1 ? "project" : "projects"}
+                {t("projects.count", { count: projects.length })}
               </Badge>
             }
           />
@@ -797,7 +794,7 @@ function AppPage() {
           {canCreate && (
             <Card className="project-card">
               <CardHeader>
-                <CardTitle>Add a project</CardTitle>
+                <CardTitle>{t("projects.add")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <form
@@ -805,20 +802,22 @@ function AppPage() {
                   onSubmit={submitProject}
                 >
                   <div className="form-field">
-                    <Label htmlFor="project-name">Project name</Label>
+                    <Label htmlFor="project-name">{t("projects.name")}</Label>
                     <Input
                       id="project-name"
                       required
                       maxLength="100"
                       pattern="[A-Za-z0-9][A-Za-z0-9._\-]*"
-                      title="Project names use letters, digits, '.', '_' and '-', and start with a letter or digit"
+                      title={t("projects.nameRule")}
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="my-project"
                     />
                   </div>
                   <div className="form-field">
-                    <Label htmlFor="repository-url">Repository URL</Label>
+                    <Label htmlFor="repository-url">
+                      {t("projects.repositoryUrl")}
+                    </Label>
                     <Input
                       id="repository-url"
                       required
@@ -833,7 +832,7 @@ function AppPage() {
                       htmlFor="project-private"
                       className="whitespace-nowrap"
                     >
-                      Private project
+                      {t("projects.private")}
                     </Label>
                     <span className="private-choice">
                       <input
@@ -847,13 +846,13 @@ function AppPage() {
                   {showCredential && (
                     <div className="form-field">
                       <Label htmlFor="repository-credential">
-                        Credential reference
+                        {t("projects.credential")}
                       </Label>
                       <Input
                         id="repository-credential"
                         maxLength="90"
                         pattern="CISYS_GIT_[A-Z0-9_]{1,80}"
-                        title="An environment variable named CISYS_GIT_..."
+                        title={t("projects.credentialRule")}
                         value={credential}
                         onChange={(e) => setCredential(e.target.value)}
                         placeholder="CISYS_GIT_PROJECT"
@@ -865,8 +864,8 @@ function AppPage() {
                     size="icon"
                     className="h-10 w-10 justify-self-end"
                     disabled={submitting}
-                    title="Add project"
-                    aria-label="Add project"
+                    title={t("projects.addButton")}
+                    aria-label={t("projects.addButton")}
                   >
                     <Plus size={16} aria-hidden="true" />
                   </Button>
@@ -876,14 +875,14 @@ function AppPage() {
           )}
           <Card className="project-card">
             <CardHeader>
-              <CardTitle>Repositories</CardTitle>
+              <CardTitle>{t("projects.repositories")}</CardTitle>
             </CardHeader>
             <CardContent>
               {projects.length === 0 ? (
                 <div className="empty-state">
                   <FolderGit2 size={28} aria-hidden="true" />
-                  <strong>No projects yet</strong>
-                  {!canCreate && <p>Ask a lead or admin to add a project.</p>}
+                  <strong>{t("projects.empty")}</strong>
+                  {!canCreate && <p>{t("projects.emptyHint")}</p>}
                 </div>
               ) : (
                 projects.map((project) => (
@@ -914,7 +913,9 @@ function AppPage() {
                           aria-hidden="true"
                         />
                       )}
-                      {project.privateRepository ? "Private" : "Public"}
+                      {project.privateRepository
+                        ? t("projects.privateBadge")
+                        : t("projects.publicBadge")}
                     </Badge>
                     <div className="project-actions">
                       {canEdit(project) && (
@@ -922,8 +923,10 @@ function AppPage() {
                           type="button"
                           size="icon"
                           disabled={submitting}
-                          title="Edit project"
-                          aria-label={`Edit project ${project.name}`}
+                          title={t("projects.edit")}
+                          aria-label={t("projects.editNamed", {
+                            name: project.name,
+                          })}
                           onClick={() => openProjectSettings(project.name)}
                         >
                           <Pencil size={16} aria-hidden="true" />
@@ -934,8 +937,10 @@ function AppPage() {
                           type="button"
                           size="icon"
                           disabled={submitting}
-                          title="Delete project"
-                          aria-label={`Delete project ${project.name}`}
+                          title={t("projects.delete")}
+                          aria-label={t("projects.deleteNamed", {
+                            name: project.name,
+                          })}
                           onClick={() => void deleteProject(project)}
                         >
                           <Trash2 size={16} aria-hidden="true" />

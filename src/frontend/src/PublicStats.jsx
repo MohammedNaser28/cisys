@@ -23,6 +23,7 @@ import {
   CardTitle,
   CardDescription,
 } from "./components/ui/card";
+import { formatNumber, relativeTimeFormat } from "./i18n";
 
 function relativeTime(value) {
   if (!value) return "Never";
@@ -34,7 +35,7 @@ function relativeTime(value) {
     ["hour", 3600],
     ["minute", 60],
   ];
-  const format = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  const format = relativeTimeFormat({ numeric: "auto" });
   for (const [unit, size] of units)
     if (Math.abs(seconds) >= size)
       return format.format(Math.round(seconds / size), unit);
@@ -60,7 +61,7 @@ export function StatTile({ icon: Icon, label, value }) {
  * Presentation only: `stats` is undefined while loading, `statsError` is set when loading failed.
  */
 export default function PublicStats({ stats, statsError }) {
-  const number = (n) => new Intl.NumberFormat().format(n);
+  const number = (n) => formatNumber(n);
   return (
     <section aria-labelledby="stats-heading">
       <h2 id="stats-heading" className="sr-only">

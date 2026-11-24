@@ -15,6 +15,7 @@ import { Textarea } from "./components/ui/textarea";
 import PageHeader from "./components/layout/PageHeader";
 import Markdown from "./Markdown";
 import { articlesPath } from "./project-paths";
+import { formatDate } from "./i18n";
 
 function message(e, fallback) {
   return e.status === 404 ? "Article not found." : e.message || fallback;
@@ -84,7 +85,7 @@ function ArticleList({ load, onOpen }) {
                 {a.title}
               </Link>
               <span className="article-meta">
-                {a.author} · {new Date(a.updatedAt).toLocaleDateString()}
+                {a.author} · {formatDate(a.updatedAt)}
               </span>
             </li>
           ))}
@@ -127,8 +128,7 @@ function ArticleView({ id, load, onOpen }) {
           <h1>{article.title}</h1>
           <div className="article-meta">
             <span>
-              {article.author} ·{" "}
-              {new Date(article.updatedAt).toLocaleDateString()}
+              {article.author} · {formatDate(article.updatedAt)}
             </span>
             {article.canEdit && (
               <span className="article-actions">

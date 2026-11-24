@@ -1,0 +1,97 @@
+{
+  "app": {
+    "connecting": "Connecting to Cisys…",
+    "loadFailed": "Unable to load Cisys",
+    "home": "{{name}} home",
+    "unsavedChanges": "You have unsaved changes. Leave anyway?",
+    "statsUnavailable": "Statistics are unavailable right now."
+  },
+  "errors": {
+    "tooManyRequests": "Too many requests. Try again later.",
+    "requestFailed": "Request failed ({{status}})",
+    "queueFull": "The build queue is full. Try again later.",
+    "requestFailedAccess": "Request failed ({{status}}). Check the branch and project access.",
+    "sessionEnded": "Your session has ended. Please sign in again."
+  },
+  "nav": {
+    "primary": "Primary",
+    "projects": "Projects",
+    "images": "Images",
+    "users": "Users",
+    "audit": "Audit",
+    "reports": "Reports",
+    "settings": "Settings",
+    "toggleDarkMode": "Toggle dark mode",
+    "accountMenu": "Account menu",
+    "profile": "Profile",
+    "signOut": "Sign out"
+  },
+  "roles": {
+    "admin": "Admin",
+    "lead": "Lead",
+    "member": "Member"
+  },
+  "profile": {
+    "title": "Profile",
+    "signedInAs": "Signed in as {{username}}"
+  },
+  "projects": {
+    "title": "Projects",
+    "count_one": "{{count}} project",
+    "count_other": "{{count}} projects",
+    "add": "Add a project",
+    "name": "Project name",
+    "nameRule": "Project names use letters, digits, '.', '_' and '-', and start with a letter or digit",
+    "repositoryUrl": "Repository URL",
+    "private": "Private project",
+    "credential": "Credential reference",
+    "credentialRule": "An environment variable named CISYS_GIT_...",
+    "addButton": "Add project",
+    "repositories": "Repositories",
+    "empty": "No projects yet",
+    "emptyHint": "Ask a lead or admin to add a project.",
+    "privateBadge": "Private",
+    "publicBadge": "Public",
+    "edit": "Edit project",
+    "editNamed": "Edit project {{name}}",
+    "delete": "Delete project",
+    "deleteNamed": "Delete project {{name}}",
+    "deleteConfirm": "Delete {{name}} and all of its builds? This cannot be undone."
+  },
+  "settings": {
+    "title": "Settings",
+    "tabs": {
+      "general": "General",
+      "reports": "Reports",
+      "network": "Network",
+      "branding": "Branding"
+    },
+    "loading": "Loading {{section}} settings…",
+    "saved": "{{section}} settings saved.",
+    "save": "Save {{section}} settings",
+    "sections": {
+      "retention": {
+        "title": "Retention",
+        "maxAgeDays": "Delete builds older than (days)",
+        "maxBuilds": "Keep at most (builds per project)"
+      },
+      "builds": {
+        "title": "Builds",
+        "maxConcurrent": "Concurrent builds",
+        "maxQueued": "Queued builds",
+        "timeoutMinutes": "Timeout (minutes)"
+      },
+      "checkout": {
+        "title": "Checkout",
+        "maxSizeMib": "Max size (MiB)",
+        "maxFiles": "Max files"
+      },
+      "performance": {
+        "title": "Performance",
+        "maxMemoryMib": "Memory limit (MiB)",
+        "maxCpus": "CPU limit (cores)",
+        "maxPids": "Process limit"
+      }
+    }
+  }
+}

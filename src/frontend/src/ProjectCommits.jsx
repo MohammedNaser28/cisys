@@ -11,6 +11,7 @@ import { Button } from "./components/ui/button";
 import { Card, CardContent } from "./components/ui/card";
 import BuildStatus from "./BuildStatus";
 import { buildPath, shortRevision } from "./build-format";
+import { formatDateTime } from "./i18n";
 
 const PAGE_SIZE = 50;
 
@@ -204,7 +205,7 @@ export default function ProjectCommits({ name, branch, load, onOpenBuild }) {
                       title={commit.authoredAt ?? undefined}
                     >
                       {commit.authoredAt
-                        ? new Date(commit.authoredAt).toLocaleString()
+                        ? formatDateTime(commit.authoredAt)
                         : "—"}
                     </td>
                     <td className="commit-builds">

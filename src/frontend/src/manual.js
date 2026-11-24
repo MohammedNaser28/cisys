@@ -6,16 +6,31 @@
  *   OF THE PROGRAM CONSTITUTES RECIPIENT'S ACCEPTANCE OF THIS AGREEMENT.
  */
 
-const sources = import.meta.glob("../../../docs/manual/en/[0-9]*.md", {
+import { FALLBACK_LOCALE, locale } from "./i18n";
+
+// Each docs/manual/<locale> is a translation; a locale without one shows the English manual.
+const allSources = import.meta.glob("../../../docs/manual/*/[0-9]*.md", {
   query: "?raw",
   import: "default",
   eager: true,
 });
-const images = import.meta.glob("../../../docs/manual/en/images/*", {
+const images = import.meta.glob("../../../docs/manual/*/images/*", {
   query: "?url",
   import: "default",
   eager: true,
 });
+
+export function manualLocale(lng, paths = Object.keys(allSources)) {
+  const has = (l) => paths.some((p) => p.includes(`/docs/manual/${l}/`));
+  if (has(lng)) return lng;
+  const language = lng.split("-")[0];
+  return has(language) ? language : FALLBACK_LOCALE;
+}
+
+const dir = `../../../docs/manual/${manualLocale(locale())}/`;
+const sources = Object.fromEntries(
+  Object.entries(allSources).filter(([path]) => path.startsWith(dir)),
+);
 
 /** Removes the Pandoc-only parts: \newpage and attribute blocks such as { width=100% }. */
 export function cleanPandoc(text) {
@@ -78,7 +93,11 @@ export function chapterBySlug(slug) {
 
 export function imageUrl(src) {
   const name = src.replace(/^\.?\/?images\//, "");
-  return images[`../../../docs/manual/en/images/${name}`] ?? src;
+  return (
+    images[`${dir}images/${name}`] ??
+    images[`../../../docs/manual/${FALLBACK_LOCALE}/images/${name}`] ??
+    src
+  );
 }
 
 /** Anchor id for a heading, e.g. "Start a build" → "start-a-build". */

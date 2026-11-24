@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "./components/ui/select";
 import PageHeader from "./components/layout/PageHeader";
+import { formatDateTime } from "./i18n";
 
 const PAGE_SIZES = [25, 50, 100];
 const OUTCOMES = ["SUCCESS", "DENIED", "FAILURE"];
@@ -53,7 +54,7 @@ function when(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? value
-    : date.toLocaleString(undefined, { timeZoneName: "short" });
+    : formatDateTime(date, { timeZoneName: "short" });
 }
 
 export default function AuditPanel({ api }) {

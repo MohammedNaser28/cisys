@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import AuditPanel from "./AuditPanel";
+import { locale } from "./i18n";
 
 beforeAll(() => {
   Element.prototype.hasPointerCapture = () => false;
@@ -110,10 +111,12 @@ describe("AuditPanel", () => {
     );
     render(<AuditPanel api={load} />);
 
-    const expected = new Date(event.occurredAt).toLocaleString(undefined, {
+    const expected = new Date(event.occurredAt).toLocaleString(locale(), {
       timeZoneName: "short",
     });
-    expect(expected).not.toBe(new Date(event.occurredAt).toLocaleString());
+    expect(expected).not.toBe(
+      new Date(event.occurredAt).toLocaleString(locale()),
+    );
     const row = (await screen.findByText("Created project alpha")).closest(
       ".audit-event",
     );

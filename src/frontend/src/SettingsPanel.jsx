@@ -8,6 +8,7 @@
 
 import React, { useEffect, useState } from "react";
 import { Save } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
@@ -24,90 +25,76 @@ import ReportsPanel from "./ReportsPanel";
 
 const SECTIONS = {
   retention: {
-    title: "Retention",
     fields: [
       {
         key: "maxAgeDays",
         id: "retention-days",
-        label: "Delete builds older than (days)",
         min: 0,
         max: 3650,
       },
       {
         key: "maxBuilds",
         id: "retention-builds",
-        label: "Keep at most (builds per project)",
         min: 0,
         max: 10000,
       },
     ],
   },
   builds: {
-    title: "Builds",
     fields: [
       {
         key: "maxConcurrent",
         id: "builds-concurrent",
-        label: "Concurrent builds",
         min: 1,
         max: 16,
       },
       {
         key: "maxQueued",
         id: "builds-queued",
-        label: "Queued builds",
         min: 1,
         max: 1000,
       },
       {
         key: "timeoutMinutes",
         id: "builds-timeout",
-        label: "Timeout (minutes)",
         min: 1,
         max: 1440,
       },
     ],
   },
   checkout: {
-    title: "Checkout",
     fields: [
       {
         key: "maxSizeMib",
         id: "checkout-size",
-        label: "Max size (MiB)",
         min: 1,
         max: 102400,
       },
       {
         key: "maxFiles",
         id: "checkout-files",
-        label: "Max files",
         min: 1,
         max: 1000000,
       },
     ],
   },
   performance: {
-    title: "Performance",
     fields: [
       {
         key: "maxMemoryMib",
         id: "performance-memory",
-        label: "Memory limit (MiB)",
         min: 64,
         max: 65536,
       },
       {
         key: "maxCpus",
         id: "performance-cpus",
-        label: "CPU limit (cores)",
         min: 1,
         max: 16,
       },
       {
         key: "maxPids",
         id: "performance-pids",
-        label: "Process limit",
         min: 16,
         max: 32768,
       },
@@ -116,7 +103,9 @@ const SECTIONS = {
 };
 
 function SettingsTab({ api, section }) {
-  const { title, fields } = SECTIONS[section];
+  const { t } = useTranslation();
+  const { fields } = SECTIONS[section];
+  const title = t(`settings.sections.${section}.title`);
   const [draft, setDraft] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -148,7 +137,7 @@ function SettingsTab({ api, section }) {
           body: JSON.stringify(body),
         }),
       );
-      setNotice(`${title} settings saved.`);
+      setNotice(t("settings.saved", { section: title }));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -170,13 +159,19 @@ function SettingsTab({ api, section }) {
           </div>
         )}
         {!draft ? (
-          !error && <p role="status">Loading {title.toLowerCase()} settings…</p>
+          !error && (
+            <p role="status">
+              {t("settings.loading", { section: title.toLowerCase() })}
+            </p>
+          )
         ) : (
           <form onSubmit={submit}>
             <div className="settings-form">
-              {fields.map(({ key, id, label, min, max }) => (
+              {fields.map(({ key, id, min, max }) => (
                 <div className="form-field" key={key}>
-                  <Label htmlFor={id}>{label}</Label>
+                  <Label htmlFor={id}>
+                    {t(`settings.sections.${section}.${key}`)}
+                  </Label>
                   <Input
                     id={id}
                     type="number"
@@ -196,8 +191,10 @@ function SettingsTab({ api, section }) {
                 size="icon"
                 className="h-10 w-10"
                 disabled={busy}
-                title={`Save ${title.toLowerCase()} settings`}
-                aria-label={`Save ${title.toLowerCase()} settings`}
+                title={t("settings.save", { section: title.toLowerCase() })}
+                aria-label={t("settings.save", {
+                  section: title.toLowerCase(),
+                })}
               >
                 <Save size={16} aria-hidden="true" />
               </Button>
@@ -210,20 +207,29 @@ function SettingsTab({ api, section }) {
 }
 
 export default function SettingsPanel({ api, branding, saveBranding }) {
+  const { t } = useTranslation();
   return (
     <main className="page-container">
-      <PageHeader title="Settings" />
+      <PageHeader title={t("settings.title")} />
       <Tabs defaultValue="general" className="settings-tabs">
         <TabsList>
-          <TabsTrigger value="general">General</TabsTrigger>
-          {Object.entries(SECTIONS).map(([value, { title }]) => (
+          <TabsTrigger value="general">
+            {t("settings.tabs.general")}
+          </TabsTrigger>
+          {Object.keys(SECTIONS).map((value) => (
             <TabsTrigger key={value} value={value}>
-              {title}
+              {t(`settings.sections.${value}.title`)}
             </TabsTrigger>
           ))}
-          <TabsTrigger value="reports">Reports</TabsTrigger>
-          <TabsTrigger value="network">Network</TabsTrigger>
-          <TabsTrigger value="branding">Branding</TabsTrigger>
+          <TabsTrigger value="reports">
+            {t("settings.tabs.reports")}
+          </TabsTrigger>
+          <TabsTrigger value="network">
+            {t("settings.tabs.network")}
+          </TabsTrigger>
+          <TabsTrigger value="branding">
+            {t("settings.tabs.branding")}
+          </TabsTrigger>
         </TabsList>
         <TabsContent
           value="general"
