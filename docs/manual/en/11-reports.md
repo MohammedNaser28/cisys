@@ -31,6 +31,8 @@ A build counts toward the period it was requested in.
 - **Branches**: the same figures for the 20 busiest branches, shown only when a single project is selected.
 - **Recent failures**: the last 20 failed builds, each linking to its build page.
 
+The names in every **Project** column, here and on the **Trends** tab, link to the project's home page.
+
 The success rate is passed / (passed + failed), so cancelled, queued and running builds are left out. The average duration only counts builds that started and finished.
 
 ## Build trends

@@ -230,6 +230,34 @@ describe("BuildStatistics", () => {
     );
   });
 
+  it("links every Project column to the project home pages", async () => {
+    const stats = {
+      ...statistics,
+      byProject: [row("1", "alpha"), row("99", "99")],
+    };
+    const onOpenProject = vi.fn();
+    render(
+      <BuildStatistics
+        load={loader({ stats })}
+        onOpenProject={onOpenProject}
+      />,
+    );
+    await screen.findAllByText("Poll");
+    await screen.findByText("Flaky revisions");
+
+    // Projects, recent failures, slowest projects and flaky revisions.
+    const links = screen.getAllByRole("link", { name: "alpha", hidden: true });
+    expect(links).toHaveLength(4);
+    links.forEach((link) => {
+      expect(link.getAttribute("href")).toBe("/alpha/");
+      fireEvent.click(link);
+    });
+    expect(onOpenProject.mock.calls).toEqual(Array(4).fill(["alpha"]));
+    // A project that no longer exists has no page.
+    expect(screen.getByText("99")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "99" })).toBeNull();
+  });
+
   it("switches tabs from the keyboard", async () => {
     render(<BuildStatistics load={loader()} />);
     await screen.findAllByText("Poll");

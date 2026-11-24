@@ -760,7 +760,11 @@ function AppPage() {
       ) : page === "users" && canManageUsers ? (
         <UsersPanel api={api} user={user} />
       ) : page === "reports" && canCreate ? (
-        <BuildStatistics load={api} onOpenBuild={openBuild} />
+        <BuildStatistics
+          load={api}
+          onOpenBuild={openBuild}
+          onOpenProject={openProject}
+        />
       ) : page === "settings" && user.roles.includes("admin") ? (
         <SettingsPanel
           api={api}

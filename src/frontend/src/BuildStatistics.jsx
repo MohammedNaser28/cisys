@@ -31,6 +31,7 @@ import { StatTile } from "./PublicStats";
 import TrendChart from "./TrendChart";
 import { buildPath, shortRevision, triggerLabel } from "./build-format";
 import { formatDateTime } from "./i18n";
+import { projectPath } from "./project-paths";
 
 const PERIODS = [
   ["7d", "Last 7 days"],
@@ -89,6 +90,27 @@ function Truncated({ text }) {
   );
 }
 
+/**
+ * A project name that links to the project's home page. Builds can outlive their project, which
+ * then has no page to link to.
+ */
+function ProjectLink({ name, projects, onOpenProject }) {
+  if (!projects.some((p) => p.name === name)) return <Truncated text={name} />;
+  return (
+    <a
+      className="build-link"
+      href={projectPath(name)}
+      onClick={(event) => {
+        if (!onOpenProject) return;
+        event.preventDefault();
+        onOpenProject(name);
+      }}
+    >
+      <Truncated text={name} />
+    </a>
+  );
+}
+
 const count = (value) => value ?? "—";
 
 function RowsTable({ title, first, rows, label = (r) => r.label }) {
@@ -133,7 +155,12 @@ function RowsTable({ title, first, rows, label = (r) => r.label }) {
   );
 }
 
-function SlowTable({ title, first, rows }) {
+function SlowTable({
+  title,
+  first,
+  rows,
+  label = (r) => <Truncated text={r.label} />,
+}) {
   return (
     <section className="report-section">
       <h2 className="report-heading">{title}</h2>
@@ -152,9 +179,7 @@ function SlowTable({ title, first, rows }) {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.label}>
-                  <td>
-                    <Truncated text={r.label} />
-                  </td>
+                  <td>{label(r)}</td>
                   <td>{r.builds}</td>
                   <td>{seconds(r.averageSeconds)}</td>
                 </tr>
@@ -167,7 +192,7 @@ function SlowTable({ title, first, rows }) {
   );
 }
 
-function FlakyTable({ rows }) {
+function FlakyTable({ rows, projectLink }) {
   return (
     <section className="report-section">
       <h2 className="report-heading">Flaky revisions</h2>
@@ -189,9 +214,7 @@ function FlakyTable({ rows }) {
             <tbody>
               {rows.map((r) => (
                 <tr key={`${r.projectId}-${r.branch}-${r.revision}`}>
-                  <td>
-                    <Truncated text={r.project} />
-                  </td>
+                  <td>{projectLink(r.project)}</td>
                   <td>
                     <Truncated text={r.branch} />
                   </td>
@@ -211,7 +234,7 @@ function FlakyTable({ rows }) {
   );
 }
 
-function OverviewPanel({ data, loading, onOpenBuild }) {
+function OverviewPanel({ data, loading, onOpenBuild, projectLink }) {
   const totals = data.totals;
   return (
     <>
@@ -236,7 +259,12 @@ function OverviewPanel({ data, loading, onOpenBuild }) {
           value={seconds(totals.averageSeconds)}
         />
       </div>
-      <RowsTable title="Projects" first="Project" rows={data.byProject} />
+      <RowsTable
+        title="Projects"
+        first="Project"
+        rows={data.byProject}
+        label={(r) => projectLink(r.label)}
+      />
       <RowsTable
         title="Triggers"
         first="Trigger"
@@ -265,9 +293,7 @@ function OverviewPanel({ data, loading, onOpenBuild }) {
               <tbody>
                 {data.recentFailures.map((f) => (
                   <tr key={f.id}>
-                    <td>
-                      <Truncated text={f.project} />
-                    </td>
+                    <td>{projectLink(f.project)}</td>
                     <td>
                       <a
                         className="build-link"
@@ -297,7 +323,7 @@ function OverviewPanel({ data, loading, onOpenBuild }) {
   );
 }
 
-function TrendsPanel({ trends, loading }) {
+function TrendsPanel({ trends, loading, projectLink }) {
   if (trends == null) {
     return loading ? (
       <p className="loading-state" role="status">
@@ -394,19 +420,20 @@ function TrendsPanel({ trends, loading }) {
         title="Slowest projects"
         first="Project"
         rows={trends.slowestProjects}
+        label={(r) => projectLink(r.label)}
       />
       <SlowTable
         title="Slowest branches"
         first="Branch"
         rows={trends.slowestBranches}
       />
-      <FlakyTable rows={trends.flakyRevisions} />
+      <FlakyTable rows={trends.flakyRevisions} projectLink={projectLink} />
     </>
   );
 }
 
 /** Build statistics across the projects the caller may report on, with a PDF export. */
-export default function BuildStatistics({ load, onOpenBuild }) {
+export default function BuildStatistics({ load, onOpenBuild, onOpenProject }) {
   const [projectId, setProjectId] = useState(ALL);
   const [period, setPeriod] = useState("30d");
   const [bucket, setBucket] = useState("");
@@ -501,6 +528,14 @@ export default function BuildStatistics({ load, onOpenBuild }) {
     setTab(next);
     document.getElementById(`report-tab-${next}`)?.focus();
   }
+
+  const projectLink = (name) => (
+    <ProjectLink
+      name={name}
+      projects={data?.projects ?? []}
+      onOpenProject={onOpenProject}
+    />
+  );
 
   return (
     <main id="reports" className="page-container">
@@ -654,6 +689,7 @@ export default function BuildStatistics({ load, onOpenBuild }) {
               data={data}
               loading={statsLoading}
               onOpenBuild={onOpenBuild}
+              projectLink={projectLink}
             />
           </div>
           <div
@@ -665,6 +701,7 @@ export default function BuildStatistics({ load, onOpenBuild }) {
             <TrendsPanel
               trends={trends}
               loading={trends == null || trendsLoading}
+              projectLink={projectLink}
             />
           </div>
         </>
