@@ -78,7 +78,7 @@ export default function BuildArtifacts({ name, buildId, load }) {
           title="Download all"
           aria-label="Download all"
         >
-          <FileArchive aria-hidden="true" />
+          <FileArchive size={16} aria-hidden="true" />
         </Button>
       </CardHeader>
       <CardContent>
@@ -101,7 +101,7 @@ export default function BuildArtifacts({ name, buildId, load }) {
                   title={`Download ${f.path}`}
                   aria-label={`Download ${f.path}`}
                 >
-                  <Download aria-hidden="true" />
+                  <Download size={16} aria-hidden="true" />
                 </Button>
               </span>
             </li>

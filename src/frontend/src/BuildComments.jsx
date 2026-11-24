@@ -7,7 +7,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { MessageSquare, Pencil, Save, Trash2, X } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Textarea } from "./components/ui/textarea";
@@ -119,7 +119,7 @@ export default function BuildComments({
                       title="Edit"
                       aria-label="Edit comment"
                     >
-                      <Pencil size={14} aria-hidden="true" />
+                      <Pencil size={16} aria-hidden="true" />
                     </Button>
                   )}
                   {c.canDelete && editing !== c.id && (
@@ -133,7 +133,7 @@ export default function BuildComments({
                       title="Delete"
                       aria-label="Delete comment"
                     >
-                      <Trash2 size={14} aria-hidden="true" />
+                      <Trash2 size={16} aria-hidden="true" />
                     </Button>
                   )}
                 </div>
@@ -147,13 +147,22 @@ export default function BuildComments({
                     <div className="comment-form-actions">
                       <Button
                         type="button"
+                        size="icon"
                         variant="outline"
+                        title="Cancel"
+                        aria-label="Cancel"
                         onClick={() => setEditing(null)}
                       >
-                        Cancel
+                        <X size={16} aria-hidden="true" />
                       </Button>
-                      <Button type="submit" disabled={busy || !editText.trim()}>
-                        Save
+                      <Button
+                        type="submit"
+                        size="icon"
+                        disabled={busy || !editText.trim()}
+                        title="Save"
+                        aria-label="Save"
+                      >
+                        <Save size={16} aria-hidden="true" />
                       </Button>
                     </div>
                   </form>
@@ -172,8 +181,14 @@ export default function BuildComments({
               onChange={(e) => setDraft(e.target.value)}
             />
             <div className="comment-form-actions">
-              <Button type="submit" disabled={busy || !draft.trim()}>
-                Comment
+              <Button
+                type="submit"
+                size="icon"
+                disabled={busy || !draft.trim()}
+                title="Comment"
+                aria-label="Add comment"
+              >
+                <MessageSquare size={16} aria-hidden="true" />
               </Button>
             </div>
           </form>

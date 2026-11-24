@@ -7,7 +7,7 @@
  */
 
 import React, { useRef, useState } from "react";
-import { Save, Upload } from "lucide-react";
+import { Save, Trash2, Upload } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
@@ -182,7 +182,6 @@ export default function BrandingPanel({ branding, save }) {
                     type="button"
                     variant="outline"
                     size="icon"
-                    className="h-10 w-10"
                     disabled={busy}
                     title={`Choose ${label.toLowerCase()}`}
                     aria-label={`Choose ${label.toLowerCase()}`}
@@ -194,15 +193,19 @@ export default function BrandingPanel({ branding, save }) {
                 {draft[key] && (
                   <div className="image-preview">
                     <img src={draft[key]} alt={`${label} preview`} />
-                    <button
+                    <Button
                       type="button"
+                      variant="outline"
+                      size="icon"
+                      title={`Remove ${label.toLowerCase()}`}
+                      aria-label={`Remove ${label.toLowerCase()}`}
                       onClick={() => {
                         change(key, null);
                         setFileNames((n) => ({ ...n, [key]: undefined }));
                       }}
                     >
-                      Remove {label.toLowerCase()}
-                    </button>
+                      <Trash2 size={16} aria-hidden="true" />
+                    </Button>
                   </div>
                 )}
               </div>
@@ -212,7 +215,6 @@ export default function BrandingPanel({ branding, save }) {
             <Button
               type="submit"
               size="icon"
-              className="h-10 w-10"
               disabled={busy}
               title="Save branding"
               aria-label="Save branding"

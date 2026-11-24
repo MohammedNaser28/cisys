@@ -270,7 +270,6 @@ export default function AuditPanel({ api }) {
                         type="button"
                         size="icon"
                         variant="outline"
-                        className="h-10 w-10"
                         title={expanded ? "Hide details" : "Show details"}
                         aria-label={`${expanded ? "Hide" : "Show"} details for event ${event.id}`}
                         aria-expanded={expanded}
@@ -294,7 +293,7 @@ export default function AuditPanel({ api }) {
                         </span>
                         <Button
                           type="button"
-                          size="icon-sm"
+                          size="icon"
                           variant="ghost"
                           title="Close details"
                           aria-label={`Close details for event ${event.id}`}
@@ -384,7 +383,7 @@ export default function AuditPanel({ api }) {
               <div className="audit-page-buttons">
                 <Button
                   type="button"
-                  size="icon-sm"
+                  size="icon"
                   variant="outline"
                   disabled={first === 0}
                   title="Previous"
@@ -395,7 +394,7 @@ export default function AuditPanel({ api }) {
                 </Button>
                 <Button
                   type="button"
-                  size="icon-sm"
+                  size="icon"
                   variant="outline"
                   disabled={first + pageSize >= total}
                   title="Next"

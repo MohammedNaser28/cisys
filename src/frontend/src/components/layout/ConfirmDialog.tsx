@@ -7,6 +7,7 @@
  */
 
 import * as React from "react";
+import { Trash2, X } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -52,12 +53,25 @@ export default function ConfirmDialog({
             {message}
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
-          <Button type="button" variant="outline" onClick={onCancel}>
-            {cancelLabel}
+        <AlertDialogFooter className="flex-row justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            title={cancelLabel}
+            aria-label={cancelLabel}
+            onClick={onCancel}
+          >
+            <X size={16} aria-hidden="true" />
           </Button>
-          <Button type="button" onClick={onConfirm}>
-            {confirmLabel}
+          <Button
+            type="button"
+            size="icon"
+            title={confirmLabel}
+            aria-label={confirmLabel}
+            onClick={onConfirm}
+          >
+            <Trash2 size={16} aria-hidden="true" />
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

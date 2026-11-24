@@ -7,6 +7,8 @@
  */
 
 import React, { useId, useState } from "react";
+import { Table } from "lucide-react";
+import { Button } from "./components/ui/button";
 
 const WIDTH = 900;
 const HEIGHT = 280;
@@ -198,15 +200,18 @@ export default function TrendChart({
     <section className="report-section">
       <div className="report-heading-row">
         <h2 className="report-heading">{title}</h2>
-        <button
+        <Button
           type="button"
-          className="report-data-toggle"
+          variant="outline"
+          size="icon"
+          title={open ? "Hide data" : "Show data"}
+          aria-label={open ? "Hide data" : "Show data"}
           aria-expanded={open}
           aria-controls={tableId}
           onClick={() => setOpen((value) => !value)}
         >
-          {open ? "Hide data" : "Show data"}
-        </button>
+          <Table size={16} aria-hidden="true" />
+        </Button>
       </div>
       <p id={summaryId} className="visually-hidden">
         {summary}

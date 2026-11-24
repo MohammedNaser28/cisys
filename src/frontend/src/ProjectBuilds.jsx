@@ -235,7 +235,7 @@ export default function ProjectBuilds({
                       disabled={startingBranch !== null}
                       onClick={() => void startBuild(branch)}
                     >
-                      <Hammer size={14} aria-hidden="true" />
+                      <Hammer size={16} aria-hidden="true" />
                     </button>
                   )}
                 </li>

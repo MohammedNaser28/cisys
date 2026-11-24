@@ -7,8 +7,10 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronDown, RotateCw } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Card, CardContent } from "./components/ui/card";
+import { Spinner } from "./components/ui/spinner";
 import BuildStatus from "./BuildStatus";
 import { buildPath, shortRevision } from "./build-format";
 import { formatDateTime } from "./i18n";
@@ -157,11 +159,13 @@ export default function ProjectCommits({ name, branch, load, onOpenBuild }) {
             <Button
               type="button"
               variant="outline"
-              size="sm"
+              size="icon"
+              title="Try again"
+              aria-label="Try again"
               disabled={error.status === 503 && retryAfter > 0}
               onClick={() => setReload((n) => n + 1)}
             >
-              Try again
+              <RotateCw size={16} aria-hidden="true" />
             </Button>
           </div>
         )}
@@ -249,11 +253,17 @@ export default function ProjectCommits({ name, branch, load, onOpenBuild }) {
             <Button
               type="button"
               variant="outline"
-              size="sm"
+              size="icon"
+              title={loadingMore ? "Loading…" : "Load older commits"}
+              aria-label={loadingMore ? "Loading…" : "Load older commits"}
               disabled={loadingMore}
               onClick={loadOlder}
             >
-              {loadingMore ? "Loading…" : "Load older commits"}
+              {loadingMore ? (
+                <Spinner />
+              ) : (
+                <ChevronDown size={16} aria-hidden="true" />
+              )}
             </Button>
           </div>
         )}

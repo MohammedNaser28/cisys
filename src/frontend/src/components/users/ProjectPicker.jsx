@@ -7,7 +7,14 @@
  */
 
 import React, { useMemo, useState } from "react";
-import { ChevronDown, Search, X } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  CheckCheck,
+  Eraser,
+  Search,
+  X,
+} from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
@@ -132,23 +139,33 @@ export default function ProjectPicker({
               <Button
                 type="button"
                 variant="ghost"
-                size="sm"
+                size="icon"
+                title="Select all"
+                aria-label="Select all"
                 disabled={visible.length === 0 || allVisibleSelected}
                 onClick={selectAllVisible}
               >
-                Select all
+                <CheckCheck size={16} aria-hidden="true" />
               </Button>
               <Button
                 type="button"
                 variant="ghost"
-                size="sm"
+                size="icon"
+                title="Clear"
+                aria-label="Clear"
                 disabled={value.length === 0}
                 onClick={() => onChange([])}
               >
-                Clear
+                <Eraser size={16} aria-hidden="true" />
               </Button>
-              <Button type="button" size="sm" onClick={() => changeOpen(false)}>
-                Done
+              <Button
+                type="button"
+                size="icon"
+                title="Done"
+                aria-label="Done"
+                onClick={() => changeOpen(false)}
+              >
+                <Check size={16} aria-hidden="true" />
               </Button>
             </div>
           </div>

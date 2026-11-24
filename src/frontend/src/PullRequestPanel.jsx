@@ -87,7 +87,6 @@ export default function PullRequestPanel({ api }) {
               <Button
                 type="submit"
                 size="icon"
-                className="h-10 w-10"
                 disabled={busy}
                 title="Save pull request settings"
                 aria-label="Save pull request settings"

@@ -222,7 +222,7 @@ export function BuildLogPanel({
           <Button
             type="button"
             variant="outline"
-            size="icon-sm"
+            size="icon"
             onClick={refresh}
             disabled={loading}
             title="Refresh"
@@ -234,7 +234,7 @@ export function BuildLogPanel({
         <Button
           type="button"
           variant="outline"
-          size="icon-sm"
+          size="icon"
           onClick={download}
           title="Download log"
           aria-label="Download log"

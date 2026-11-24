@@ -181,7 +181,7 @@ export default function ImagesPanel({ api, onSaved }) {
             <Button
               type="submit"
               size="icon"
-              className="h-10 w-10 justify-self-end"
+              className="justify-self-end"
               disabled={!!working || busy}
               title={working === "pull" ? "Pulling…" : "Pull image"}
               aria-label={working === "pull" ? "Pulling…" : "Pull image"}
@@ -229,7 +229,6 @@ export default function ImagesPanel({ api, onSaved }) {
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="h-10 w-10"
                       disabled={!!working}
                       onClick={() => void remove(i.name)}
                       title={working === i.name ? "Removing…" : "Remove image"}
@@ -268,7 +267,6 @@ export default function ImagesPanel({ api, onSaved }) {
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="h-10 w-10"
                       disabled={!!working}
                       onClick={() => void pull(null, name)}
                       title={
@@ -295,7 +293,6 @@ export default function ImagesPanel({ api, onSaved }) {
             <Button
               type="button"
               size="icon"
-              className="h-10 w-10"
               onClick={save}
               disabled={busy || loading || !!working}
               title="Save allowed images"
@@ -307,7 +304,6 @@ export default function ImagesPanel({ api, onSaved }) {
               type="button"
               variant="outline"
               size="icon"
-              className="h-10 w-10"
               onClick={() => {
                 setNotice("");
                 void load();

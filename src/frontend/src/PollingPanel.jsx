@@ -186,7 +186,6 @@ export default function PollingPanel({ api }) {
               <Button
                 type="submit"
                 size="icon"
-                className="h-10 w-10"
                 disabled={busy}
                 title="Save automatic build settings"
                 aria-label="Save automatic build settings"

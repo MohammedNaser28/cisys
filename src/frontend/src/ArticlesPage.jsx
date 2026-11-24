@@ -7,7 +7,7 @@
  */
 
 import React, { useEffect, useState } from "react";
-import { ChevronLeft, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, Eye, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
@@ -70,8 +70,14 @@ function ArticleList({ load, onOpen }) {
         title="Articles"
         actions={
           listing?.canEdit && (
-            <Button type="button" onClick={() => onOpen({ edit: true })}>
-              <Plus size={16} aria-hidden="true" /> New article
+            <Button
+              type="button"
+              size="icon"
+              title="New article"
+              aria-label="New article"
+              onClick={() => onOpen({ edit: true })}
+            >
+              <Plus size={16} aria-hidden="true" />
             </Button>
           )
         }
@@ -140,7 +146,7 @@ function ArticleView({ id, load, onOpen }) {
                   aria-label="Edit article"
                   onClick={() => onOpen({ id, edit: true })}
                 >
-                  <Pencil size={14} aria-hidden="true" />
+                  <Pencil size={16} aria-hidden="true" />
                 </Button>
                 <Button
                   type="button"
@@ -151,7 +157,7 @@ function ArticleView({ id, load, onOpen }) {
                   disabled={busy}
                   onClick={remove}
                 >
-                  <Trash2 size={14} aria-hidden="true" />
+                  <Trash2 size={16} aria-hidden="true" />
                 </Button>
               </span>
             )}
@@ -217,19 +223,25 @@ function ArticleEditor({ id, load, onOpen }) {
           <div className="article-tabs" role="group" aria-label="Body view">
             <Button
               type="button"
+              size="icon"
               variant={preview ? "ghost" : "outline"}
+              title="Write"
+              aria-label="Write"
               aria-pressed={!preview}
               onClick={() => setPreview(false)}
             >
-              Write
+              <Pencil size={16} aria-hidden="true" />
             </Button>
             <Button
               type="button"
+              size="icon"
               variant={preview ? "outline" : "ghost"}
+              title="Preview"
+              aria-label="Preview"
               aria-pressed={preview}
               onClick={() => setPreview(true)}
             >
-              Preview
+              <Eye size={16} aria-hidden="true" />
             </Button>
           </div>
           {preview ? (
@@ -249,16 +261,22 @@ function ArticleEditor({ id, load, onOpen }) {
           <div className="comment-form-actions">
             <Button
               type="button"
+              size="icon"
               variant="outline"
+              title="Cancel"
+              aria-label="Cancel"
               onClick={() => onOpen(cancel)}
             >
-              Cancel
+              <X size={16} aria-hidden="true" />
             </Button>
             <Button
               type="submit"
+              size="icon"
+              title="Save"
+              aria-label="Save"
               disabled={busy || !draft.title.trim() || !draft.body.trim()}
             >
-              Save
+              <Save size={16} aria-hidden="true" />
             </Button>
           </div>
         </form>

@@ -98,7 +98,7 @@ describe("BuildComments", () => {
     fireEvent.change(screen.getByLabelText("New comment"), {
       target: { value: "Hello" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Comment" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add comment" }));
     await waitFor(() =>
       expect(api).toHaveBeenCalledWith("/projects/7/builds/42/comments", {
         method: "POST",

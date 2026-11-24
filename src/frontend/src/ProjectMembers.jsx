@@ -7,7 +7,7 @@
  */
 
 import React, { useState } from "react";
-import { Trash2, Users, UserPlus } from "lucide-react";
+import { RotateCw, Trash2, Users, UserPlus } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Label } from "./components/ui/label";
 import { Badge } from "./components/ui/badge";
@@ -132,10 +132,13 @@ export default function ProjectMembers({
               <Button
                 type="button"
                 variant="outline"
+                size="icon"
                 className="mt-3"
+                title="Retry"
+                aria-label="Retry"
                 onClick={onRetry}
               >
-                Retry
+                <RotateCw size={16} aria-hidden="true" />
               </Button>
             )}
           </div>
@@ -253,7 +256,6 @@ export default function ProjectMembers({
             <Button
               type="submit"
               size="icon"
-              className="h-10 w-10"
               disabled={busy || !name.trim()}
               title="Add member"
               aria-label="Add member"

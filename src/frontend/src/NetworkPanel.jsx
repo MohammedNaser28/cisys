@@ -134,7 +134,7 @@ export default function NetworkPanel({ api }) {
             <Button
               type="submit"
               size="icon"
-              className="h-10 w-10 justify-self-end"
+              className="justify-self-end"
               disabled={busy}
               title="Add host"
               aria-label="Add host"
@@ -156,7 +156,7 @@ export default function NetworkPanel({ api }) {
                     title={t.hosts.join(", ")}
                     onClick={() => addTemplate(t)}
                   >
-                    <Plus size={14} aria-hidden="true" />
+                    <Plus size={16} aria-hidden="true" />
                     {t.name}
                   </Button>
                 ))}
@@ -209,7 +209,6 @@ export default function NetworkPanel({ api }) {
                     <Button
                       type="submit"
                       size="icon"
-                      className="h-10 w-10"
                       disabled={busy}
                       title="Save host"
                       aria-label={`Save ${h.host}`}
@@ -220,7 +219,6 @@ export default function NetworkPanel({ api }) {
                       type="button"
                       size="icon"
                       variant="outline"
-                      className="h-10 w-10"
                       title="Cancel"
                       aria-label="Cancel"
                       onClick={() => setEditing(null)}
@@ -248,7 +246,6 @@ export default function NetworkPanel({ api }) {
                       type="button"
                       size="icon"
                       variant="outline"
-                      className="h-10 w-10"
                       disabled={busy}
                       title="Edit host"
                       aria-label={`Edit ${h.host}`}
@@ -261,7 +258,6 @@ export default function NetworkPanel({ api }) {
                     <Button
                       type="button"
                       size="icon"
-                      className="h-10 w-10"
                       disabled={busy}
                       title="Remove host"
                       aria-label={`Remove ${h.host}`}

@@ -93,7 +93,6 @@ export default function GeneralPanel({ api }) {
               <Button
                 type="submit"
                 size="icon"
-                className="h-10 w-10"
                 disabled={busy}
                 title="Save general settings"
                 aria-label="Save general settings"

@@ -319,7 +319,6 @@ export default function ProjectSettings({
                 type="submit"
                 form="project-settings-form"
                 size="icon"
-                className="h-10 w-10"
                 disabled={busy}
                 title="Save changes"
                 aria-label="Save changes"
@@ -330,7 +329,6 @@ export default function ProjectSettings({
                 type="button"
                 variant="outline"
                 size="icon"
-                className="h-10 w-10"
                 disabled={busy}
                 onClick={discard}
                 title="Discard changes"

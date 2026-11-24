@@ -188,7 +188,6 @@ export default function ReportsPanel({ api }) {
                 <Button
                   type="submit"
                   size="icon"
-                  className="h-10 w-10"
                   disabled={busy || !draft.className}
                   title="Save report type"
                   aria-label="Save report type"

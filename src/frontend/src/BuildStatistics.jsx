@@ -15,6 +15,7 @@ import {
   Percent,
   Clock,
   FileDown,
+  CalendarX,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Label } from "./components/ui/label";
@@ -509,13 +510,12 @@ export default function BuildStatistics({ load, onOpenBuild }) {
           <Button
             type="button"
             size="icon"
-            className="h-10 w-10"
             onClick={exportPdf}
             disabled={!data}
             title="Export PDF"
             aria-label="Export PDF"
           >
-            <FileDown aria-hidden="true" />
+            <FileDown size={16} aria-hidden="true" />
           </Button>
         }
       />
@@ -595,10 +595,12 @@ export default function BuildStatistics({ load, onOpenBuild }) {
           <Button
             type="button"
             variant="outline"
-            size="sm"
+            size="icon"
+            title="Clear dates"
+            aria-label="Clear dates"
             onClick={clearDates}
           >
-            Clear dates
+            <CalendarX size={16} aria-hidden="true" />
           </Button>
         </div>
       )}

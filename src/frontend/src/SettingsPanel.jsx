@@ -208,7 +208,6 @@ function SettingsTab({ api, section }) {
               <Button
                 type="submit"
                 size="icon"
-                className="h-10 w-10"
                 disabled={busy}
                 title={t("settings.save", { section: title.toLowerCase() })}
                 aria-label={t("settings.save", {

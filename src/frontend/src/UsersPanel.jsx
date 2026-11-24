@@ -263,7 +263,7 @@ export default function UsersPanel({ api, user }) {
               <Button
                 type="submit"
                 size="icon"
-                className="h-10 w-10 justify-self-end self-end"
+                className="justify-self-end self-end"
                 disabled={busy || (!admin && draft.projectIds.length === 0)}
                 title="Add user"
                 aria-label="Add user"
@@ -426,7 +426,6 @@ export default function UsersPanel({ api, user }) {
                     <Button
                       type="submit"
                       size="icon"
-                      className="h-10 w-10"
                       disabled={busy}
                       title="Save user"
                       aria-label={`Save ${u.username}`}
@@ -437,7 +436,6 @@ export default function UsersPanel({ api, user }) {
                       type="button"
                       size="icon"
                       variant="outline"
-                      className="h-10 w-10"
                       title="Cancel"
                       aria-label="Cancel"
                       onClick={() => setEditing(null)}
@@ -485,7 +483,6 @@ export default function UsersPanel({ api, user }) {
                         type="button"
                         size="icon"
                         variant="outline"
-                        className="h-10 w-10"
                         disabled={busy}
                         title="Edit user"
                         aria-label={`Edit ${u.username}`}
@@ -511,7 +508,6 @@ export default function UsersPanel({ api, user }) {
                         type="button"
                         size="icon"
                         variant="outline"
-                        className="h-10 w-10"
                         disabled={busy}
                         title="Set temporary password"
                         aria-label={`Set temporary password for ${u.username}`}
@@ -526,7 +522,6 @@ export default function UsersPanel({ api, user }) {
                       <Button
                         type="button"
                         size="icon"
-                        className="h-10 w-10"
                         disabled={busy}
                         title="Delete user"
                         aria-label={`Delete ${u.username}`}

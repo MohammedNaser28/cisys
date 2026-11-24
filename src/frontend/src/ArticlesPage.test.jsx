@@ -52,7 +52,7 @@ describe("ArticlesPage", () => {
     fireEvent.click(await screen.findByText("FAQ"));
     expect(load).toHaveBeenCalledWith("/articles");
     expect(onOpen).toHaveBeenCalledWith({ id: 7 });
-    expect(screen.queryByText("New article")).toBeNull();
+    expect(screen.queryByLabelText("New article")).toBeNull();
   });
 
   it("offers a new article to editors", async () => {
@@ -66,7 +66,7 @@ describe("ArticlesPage", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByText("New article"));
+    fireEvent.click(await screen.findByLabelText("New article"));
     expect(onOpen).toHaveBeenCalledWith({ edit: true });
   });
 
@@ -122,7 +122,7 @@ describe("ArticlesPage", () => {
     fireEvent.change(screen.getByLabelText("Body"), {
       target: { value: "Steps" },
     });
-    fireEvent.click(screen.getByText("Save"));
+    fireEvent.click(screen.getByLabelText("Save"));
 
     await waitFor(() => expect(onOpen).toHaveBeenCalledWith({ id: 9 }));
     expect(load).toHaveBeenCalledWith("/articles", {
@@ -148,9 +148,9 @@ describe("ArticlesPage", () => {
     fireEvent.change(screen.getByLabelText("Title"), {
       target: { value: "FAQ 2" },
     });
-    fireEvent.click(screen.getByText("Preview"));
+    fireEvent.click(screen.getByLabelText("Preview"));
     expect(screen.getByRole("heading", { name: "Why" })).toBeTruthy();
-    fireEvent.click(screen.getByText("Save"));
+    fireEvent.click(screen.getByLabelText("Save"));
 
     await waitFor(() => expect(onOpen).toHaveBeenCalledWith({ id: 7 }));
     expect(load).toHaveBeenLastCalledWith("/articles/7", {

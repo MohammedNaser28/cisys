@@ -862,7 +862,7 @@ function AppPage() {
                   <Button
                     type="submit"
                     size="icon"
-                    className="h-10 w-10 justify-self-end"
+                    className="justify-self-end"
                     disabled={submitting}
                     title={t("projects.addButton")}
                     aria-label={t("projects.addButton")}
