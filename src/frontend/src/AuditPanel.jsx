@@ -384,27 +384,25 @@ export default function AuditPanel({ api }) {
               <div className="audit-page-buttons">
                 <Button
                   type="button"
-                  size="sm"
+                  size="icon-sm"
                   variant="outline"
                   disabled={first === 0}
-                  title="Previous page"
+                  title="Previous"
                   aria-label="Previous page"
                   onClick={() => setFirst(Math.max(0, first - pageSize))}
                 >
-                  <ChevronLeft size={14} aria-hidden="true" />
-                  Previous
+                  <ChevronLeft size={16} aria-hidden="true" />
                 </Button>
                 <Button
                   type="button"
-                  size="sm"
+                  size="icon-sm"
                   variant="outline"
                   disabled={first + pageSize >= total}
-                  title="Next page"
+                  title="Next"
                   aria-label="Next page"
                   onClick={() => setFirst(first + pageSize)}
                 >
-                  Next
-                  <ChevronRight size={14} aria-hidden="true" />
+                  <ChevronRight size={16} aria-hidden="true" />
                 </Button>
               </div>
             </div>
