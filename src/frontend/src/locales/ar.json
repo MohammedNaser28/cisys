@@ -1,0 +1,107 @@
+{
+  "app": {
+    "connecting": "جارٍ الاتصال بـ Cisys…",
+    "loadFailed": "تعذّر تحميل Cisys",
+    "home": "الصفحة الرئيسية لـ {{name}}",
+    "unsavedChanges": "لديك تغييرات غير محفوظة. هل تريد المغادرة؟",
+    "statsUnavailable": "الإحصاءات غير متاحة حاليًا."
+  },
+  "errors": {
+    "tooManyRequests": "طلبات كثيرة جدًا. حاول مرة أخرى لاحقًا.",
+    "requestFailed": "فشل الطلب ({{status}})",
+    "queueFull": "طابور البناء ممتلئ. حاول مرة أخرى لاحقًا.",
+    "requestFailedAccess": "فشل الطلب ({{status}}). تحقق من الفرع وصلاحيات الوصول إلى المشروع.",
+    "sessionEnded": "انتهت جلستك. يرجى تسجيل الدخول مرة أخرى."
+  },
+  "nav": {
+    "primary": "الرئيسية",
+    "projects": "المشاريع",
+    "images": "صور الحاويات",
+    "users": "المستخدمون",
+    "audit": "التدقيق",
+    "reports": "التقارير",
+    "settings": "الإعدادات",
+    "toggleDarkMode": "تبديل الوضع الداكن",
+    "accountMenu": "قائمة الحساب",
+    "profile": "الملف الشخصي",
+    "signOut": "تسجيل الخروج"
+  },
+  "roles": {
+    "admin": "مدير",
+    "lead": "قائد",
+    "member": "عضو"
+  },
+  "profile": {
+    "title": "الملف الشخصي",
+    "signedInAs": "تم تسجيل الدخول باسم {{username}}"
+  },
+  "projects": {
+    "title": "المشاريع",
+    "count_zero": "لا توجد مشاريع",
+    "count_one": "مشروع واحد",
+    "count_two": "مشروعان",
+    "count_few": "{{count}} مشاريع",
+    "count_many": "{{count}} مشروعًا",
+    "count_other": "{{count}} مشروع",
+    "add": "إضافة مشروع",
+    "name": "اسم المشروع",
+    "nameRule": "تتكوّن أسماء المشاريع من حروف وأرقام و '.' و '_' و '-'، وتبدأ بحرف أو رقم",
+    "repositoryUrl": "رابط المستودع",
+    "private": "مشروع خاص",
+    "credential": "مرجع بيانات الاعتماد",
+    "credentialRule": "متغير بيئة اسمه CISYS_GIT_...",
+    "addButton": "إضافة المشروع",
+    "repositories": "المستودعات",
+    "empty": "لا توجد مشاريع بعد",
+    "emptyHint": "اطلب من قائد أو مدير إضافة مشروع.",
+    "privateBadge": "خاص",
+    "publicBadge": "عام",
+    "edit": "تعديل المشروع",
+    "editNamed": "تعديل المشروع {{name}}",
+    "delete": "حذف المشروع",
+    "deleteNamed": "حذف المشروع {{name}}",
+    "deleteConfirm": "هل تريد حذف {{name}} وجميع عمليات البناء فيه؟ لا يمكن التراجع عن ذلك."
+  },
+  "settings": {
+    "title": "الإعدادات",
+    "tabs": {
+      "general": "عام",
+      "reports": "التقارير",
+      "network": "الشبكة",
+      "branding": "الهوية"
+    },
+    "loading": "جارٍ تحميل إعدادات {{section}}…",
+    "saved": "تم حفظ إعدادات {{section}}.",
+    "save": "حفظ إعدادات {{section}}",
+    "sections": {
+      "retention": {
+        "title": "الاحتفاظ",
+        "maxAgeDays": "حذف عمليات البناء الأقدم من (أيام)",
+        "maxBuilds": "الحد الأقصى للاحتفاظ (عمليات بناء لكل مشروع)"
+      },
+      "builds": {
+        "title": "عمليات البناء",
+        "maxConcurrent": "عمليات البناء المتزامنة",
+        "maxQueued": "عمليات البناء في الطابور",
+        "timeoutMinutes": "المهلة (دقائق)"
+      },
+      "checkout": {
+        "title": "السحب من المستودع",
+        "maxSizeMib": "الحجم الأقصى (MiB)",
+        "maxFiles": "الحد الأقصى للملفات"
+      },
+      "artifacts": {
+        "title": "الناتج",
+        "heading": "النواتج",
+        "maxSizeMib": "الحجم الأقصى للنواتج لكل عملية بناء (MiB)",
+        "maxFiles": "الحد الأقصى لملفات النواتج لكل عملية بناء"
+      },
+      "performance": {
+        "title": "الأداء",
+        "maxMemoryMib": "حد الذاكرة (MiB)",
+        "maxCpus": "حد المعالج (أنوية)",
+        "maxPids": "حد العمليات"
+      }
+    }
+  }
+}

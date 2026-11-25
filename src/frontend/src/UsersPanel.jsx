@@ -449,7 +449,7 @@ export default function UsersPanel({ api, user }) {
                   <div className="project-name">
                     <strong>{u.username}</strong>
                     {!u.enabled && (
-                      <Badge variant="outline" className="ml-2">
+                      <Badge variant="outline" className="ms-2">
                         Disabled
                       </Badge>
                     )}

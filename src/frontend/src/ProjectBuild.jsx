@@ -61,7 +61,11 @@ export function FoldedText({ text, label }) {
         {open ? (
           <ChevronDown size={14} aria-hidden="true" />
         ) : (
-          <ChevronRight size={14} aria-hidden="true" />
+          <ChevronRight
+            size={14}
+            className="rtl:rotate-180"
+            aria-hidden="true"
+          />
         )}
         {open ? (
           <span className="sr-only">Hide {label}</span>
@@ -239,7 +243,11 @@ export default function ProjectBuild({
               title="Back to builds"
               aria-label="Back to builds"
             >
-              <ArrowLeft size={16} aria-hidden="true" />
+              <ArrowLeft
+                size={16}
+                className="rtl:rotate-180"
+                aria-hidden="true"
+              />
             </Button>
           </>
         }

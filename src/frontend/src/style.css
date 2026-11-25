@@ -112,13 +112,16 @@ body {
   width: 1.4rem;
   height: 1.4rem;
   top: 0.25rem;
-  left: 0.25rem;
+  inset-inline-start: 0.25rem;
   background: white;
   border-radius: 50%;
   transition: transform 0.2s;
 }
 .theme-toggle[aria-pressed="true"] .theme-knob {
   transform: translateX(2rem);
+}
+[dir="rtl"] .theme-toggle[aria-pressed="true"] .theme-knob {
+  transform: translateX(-2rem);
 }
 .header-icon,
 .user-menu-trigger {
@@ -130,7 +133,7 @@ body {
   border: 0;
   border-radius: 0.375rem;
   padding: 0.25rem 0.5rem;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 .header-icon:hover,
@@ -278,7 +281,7 @@ body {
 }
 .branch-option {
   width: 100%;
-  text-align: left;
+  text-align: start;
   padding: 0.4rem 0.55rem;
   border: 0;
   border-radius: 0.35rem;
@@ -344,7 +347,7 @@ body {
 }
 .builds-table th {
   padding: 0.5rem 0.6rem;
-  text-align: left;
+  text-align: start;
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -402,7 +405,7 @@ body {
 }
 .build-pin {
   display: inline;
-  margin-left: 0.35rem;
+  margin-inline-start: 0.35rem;
   vertical-align: -2px;
   color: var(--muted-foreground);
 }
@@ -488,7 +491,7 @@ body {
   background: none;
   color: inherit;
   font: inherit;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 .folded-text-toggle svg {
@@ -708,6 +711,7 @@ body {
   }
 }
 .trend-chart {
+  direction: ltr;
   display: block;
   width: 100%;
   height: auto;
@@ -856,7 +860,7 @@ body {
     align-items: flex-start;
   }
   .header-actions {
-    margin-left: auto;
+    margin-inline-start: auto;
   }
   .project-form,
   .project-grid,
@@ -1121,7 +1125,7 @@ body {
   gap: 1rem;
   align-items: center;
   justify-items: start;
-  text-align: left;
+  text-align: start;
   padding: 1rem 0;
   border-top: 1px solid var(--card-border);
 }
@@ -1264,12 +1268,12 @@ body {
 }
 .project-picker-search > svg {
   position: absolute;
-  left: 0.625rem;
+  inset-inline-start: 0.625rem;
   color: var(--muted-foreground);
   pointer-events: none;
 }
 .project-picker-search [data-slot="input"] {
-  padding-left: 2rem;
+  padding-inline-start: 2rem;
 }
 .project-picker-list {
   display: grid;
@@ -1328,7 +1332,7 @@ body {
 .project-chip {
   gap: 0.25rem;
   max-width: 100%;
-  padding-right: 0.25rem;
+  padding-inline-end: 0.25rem;
 }
 .project-chip-remove {
   display: inline-flex;
@@ -1393,11 +1397,11 @@ body {
   font-weight: 600;
 }
 .comment-edit {
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 /* Only the first icon takes the free space, so Edit and Delete stay together on the right. */
 .comment-edit + .comment-edit {
-  margin-left: 0;
+  margin-inline-start: 0;
 }
 .comment-body {
   margin: 0;
@@ -1504,11 +1508,11 @@ body {
 }
 .manual ul {
   list-style: disc;
-  padding-left: 1.5rem;
+  padding-inline-start: 1.5rem;
 }
 .manual ol {
   list-style: decimal;
-  padding-left: 1.5rem;
+  padding-inline-start: 1.5rem;
 }
 .manual li + li {
   margin-top: 0.25rem;
@@ -1551,15 +1555,15 @@ body {
 .manual td {
   padding: 0.4rem 0.75rem;
   border: 1px solid var(--card-border);
-  text-align: left;
+  text-align: start;
   vertical-align: top;
 }
 .manual th {
   background: var(--surface-accent);
 }
 .manual blockquote {
-  padding-left: 1rem;
-  border-left: 3px solid var(--card-border);
+  padding-inline-start: 1rem;
+  border-inline-start: 3px solid var(--card-border);
   color: var(--muted-text);
 }
 .manual-pager {
@@ -1747,12 +1751,12 @@ body {
 .audit-page-buttons {
   display: flex;
   gap: 0.5rem;
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 @media (max-width: 560px) {
   .audit-page-buttons {
     justify-content: flex-end;
-    margin-left: 0;
+    margin-inline-start: 0;
     width: 100%;
   }
 }

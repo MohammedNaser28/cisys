@@ -45,7 +45,7 @@ export default function ConfirmDialog({
   return (
     <AlertDialog open={open} onOpenChange={(next) => !next && onCancel()}>
       <AlertDialogContent className="overflow-hidden pt-0">
-        <AlertDialogHeader className="place-items-start text-left">
+        <AlertDialogHeader className="place-items-start text-start">
           <AlertDialogTitle className="-mx-4 w-[calc(100%+2rem)] bg-[var(--header-bg)] px-4 py-3 text-[var(--header-text)]">
             {title}
           </AlertDialogTitle>

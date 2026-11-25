@@ -47,8 +47,21 @@ i18n.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 
+/** The text direction of a UI language: right to left for Arabic, Hebrew, Persian and Urdu. */
+export function textDirection(lng) {
+  try {
+    return new Intl.Locale(lng).getTextInfo().direction;
+  } catch {
+    return ["ar", "fa", "he", "ur"].includes(lng?.split("-")[0])
+      ? "rtl"
+      : "ltr";
+  }
+}
+
 function syncDocumentLanguage(lng) {
-  if (globalThis.document) document.documentElement.lang = lng;
+  if (!globalThis.document) return;
+  document.documentElement.lang = lng;
+  document.documentElement.dir = textDirection(lng);
 }
 syncDocumentLanguage(i18n.language);
 i18n.on("languageChanged", syncDocumentLanguage);

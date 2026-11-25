@@ -217,7 +217,7 @@ export function BuildLogPanel({
           title ? "build-log-actions build-log-header" : "build-log-actions"
         }
       >
-        {title && <CardTitle className="mr-auto">{title}</CardTitle>}
+        {title && <CardTitle className="me-auto">{title}</CardTitle>}
         {["QUEUED", "RUNNING"].includes(build.status) && (
           <Button
             type="button"

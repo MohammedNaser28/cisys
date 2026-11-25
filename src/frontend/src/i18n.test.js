@@ -7,9 +7,15 @@
  */
 
 import { describe, expect, it } from "vitest";
-import i18n, { detectLocale, formatNumber, supportedLocales } from "./i18n";
+import i18n, {
+  detectLocale,
+  formatNumber,
+  supportedLocales,
+  textDirection,
+} from "./i18n";
 import { manualLocale } from "./manual";
 import en from "./locales/en.json";
+import ar from "./locales/ar.json";
 
 describe("detectLocale", () => {
   it("matches the full tag, then the language, then falls back to English", () => {
@@ -52,5 +58,34 @@ describe("manualLocale", () => {
     expect(manualLocale("de", paths)).toBe("de");
     expect(manualLocale("de-AT", paths)).toBe("de");
     expect(manualLocale("fr", paths)).toBe("en");
+  });
+});
+
+describe("Arabic", () => {
+  const keys = (o, prefix = "") =>
+    Object.entries(o).flatMap(([k, v]) =>
+      typeof v === "object" ? keys(v, `${prefix}${k}.`) : [`${prefix}${k}`],
+    );
+  const base = (key) => key.replace(/_(zero|one|two|few|many|other)$/, "");
+
+  it("translates every English string", () => {
+    const translated = new Set(keys(ar).map(base));
+    expect(
+      keys(en)
+        .map(base)
+        .filter((k) => !translated.has(k)),
+    ).toEqual([]);
+  });
+
+  it("uses the Arabic plural forms and right-to-left direction", async () => {
+    expect(supportedLocales).toContain("ar");
+    expect(textDirection("ar")).toBe("rtl");
+    expect(textDirection("en")).toBe("ltr");
+    await i18n.changeLanguage("ar");
+    expect(i18n.t("projects.count", { count: 2 })).toBe("مشروعان");
+    expect(i18n.t("projects.count", { count: 3 })).toBe("3 مشاريع");
+    expect(document.documentElement.dir).toBe("rtl");
+    await i18n.changeLanguage("en");
+    expect(document.documentElement.dir).toBe("ltr");
   });
 });

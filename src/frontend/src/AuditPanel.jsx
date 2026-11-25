@@ -238,7 +238,7 @@ export default function AuditPanel({ api }) {
                       <strong>{event.summary}</strong>
                       <Badge
                         variant={outcomeVariant(event.outcome)}
-                        className="ml-2"
+                        className="ms-2"
                       >
                         {event.outcome}
                       </Badge>
