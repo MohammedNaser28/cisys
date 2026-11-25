@@ -461,27 +461,34 @@ public class BuildStatisticsResource {
     }
     Instant now = Instant.now();
     boolean explicit = fromInstant != null || toInstant != null;
-    String unit =
-        requestedBucket != null
-            ? requestedBucket
-            : defaultBucket(
-                period,
-                explicit,
-                fromInstant == null ? now : fromInstant,
-                toInstant == null ? now : toInstant);
     Collection<Long> ids = projectId != null ? List.of(projectId) : allowed;
     if (ids != null && ids.isEmpty()) {
+      String unit =
+          requestedBucket != null
+              ? requestedBucket
+              : defaultBucket(
+                  period,
+                  explicit,
+                  fromInstant == null ? now : fromInstant,
+                  toInstant == null ? now : toInstant);
       return emptyTrends(refs, projectId, period, unit, now);
     }
     Map<Long, String> names = projects.stream().collect(Collectors.toMap(x -> x.id, x -> x.name));
+    Instant fullTo =
+        toInstant != null
+            ? toInstant
+            : (fromInstant != null && fromInstant.isAfter(now) ? fromInstant : now);
     Instant fullFrom = explicit ? fromInstant : since(period, now);
-    Instant fullTo = explicit ? toInstant : now;
     if (fullFrom == null) {
-      fullFrom = earliest(ids);
+      fullFrom = earliest(ids, fullTo);
     }
-    if (fullFrom == null) {
+    if (fullFrom == null || fullFrom.isAfter(fullTo)) {
       fullFrom = fullTo;
     }
+    String unit =
+        requestedBucket != null
+            ? requestedBucket
+            : defaultBucket(period, explicit, fullFrom, fullTo);
     List<Instant> starts = bucketStarts(fullFrom, fullTo, unit);
     if (unit.equals("day") && starts.size() > MAX_BUCKETS) {
       unit = "week";
@@ -579,15 +586,17 @@ public class BuildStatisticsResource {
     return " where " + String.join(" and ", parts);
   }
 
-  private Instant earliest(Collection<Long> ids) {
-    String sql = "select min(coalesce(requestedat, startedat)) from build";
+  private Instant earliest(Collection<Long> ids, Instant to) {
+    String sql =
+        "select min(coalesce(requestedat, startedat)) from build"
+            + " where coalesce(requestedat, startedat) <= :to";
     if (ids != null) {
       sql +=
-          " where projectid in ("
+          " and projectid in ("
               + ids.stream().map(String::valueOf).collect(Collectors.joining(","))
               + ")";
     }
-    return toInstant(em.createNativeQuery(sql).getSingleResult());
+    return toInstant(em.createNativeQuery(sql).setParameter("to", to).getSingleResult());
   }
 
   private TrendPoint totalPoint(Collection<Long> ids, Instant from, Instant to) {

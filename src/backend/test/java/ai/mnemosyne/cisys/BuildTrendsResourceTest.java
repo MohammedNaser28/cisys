@@ -459,4 +459,37 @@ class BuildTrendsResourceTest {
     assertTrue(text.toString().contains("Volume by bucket"));
     assertTrue(text.toString().contains("Flaky revisions"));
   }
+
+  @Test
+  @TestSecurity(user = "admin", roles = "admin")
+  @JwtSecurity(claims = {@Claim(key = "sub", value = "trend-admin-id")})
+  void fromWithoutToDefaultsUpperBoundToNow() {
+    Long p = project(LEAD);
+    Instant now = Instant.now();
+    build(p, Build.Status.PASSED, Build.Trigger.MANUAL, "main", now.minus(5, ChronoUnit.DAYS));
+    build(p, Build.Status.PASSED, Build.Trigger.MANUAL, "main", now.minus(1, ChronoUnit.DAYS));
+
+    Instant from = now.minus(2, ChronoUnit.DAYS);
+    JsonPath s = trends("?projectId=" + p + "&from=" + from);
+    assertEquals(1, s.getLong("totals.builds"));
+    assertFalse(Instant.parse(s.getString("from")).isAfter(Instant.parse(s.getString("to"))));
+    assertFalse(s.getList("buckets").isEmpty());
+  }
+
+  @Test
+  @TestSecurity(user = "admin", roles = "admin")
+  @JwtSecurity(claims = {@Claim(key = "sub", value = "trend-admin-id")})
+  void toWithoutFromDoesNotInvertRangeWhenBuildsAreNewer() {
+    Long p = project(LEAD);
+    build(
+        p,
+        Build.Status.PASSED,
+        Build.Trigger.MANUAL,
+        "main",
+        Instant.parse("2026-06-01T10:00:00Z"));
+
+    JsonPath s = trends("?projectId=" + p + "&to=2026-01-01T23:59:59Z");
+    assertEquals(0, s.getLong("totals.builds"));
+    assertFalse(Instant.parse(s.getString("from")).isAfter(Instant.parse(s.getString("to"))));
+  }
 }
