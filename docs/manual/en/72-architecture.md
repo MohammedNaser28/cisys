@@ -4,7 +4,7 @@
 
 ## Backend
 
-[**cisys**](https://github.com/mnemosyne-systems/cisys) is built on [Java](https://en.wikipedia.org/wiki/Java_(programming_language)) 25 and [Quarkus](https://quarkus.io/) 3.40 using [PostgreSQL](https://www.postgresql.org/) as the database.
+[**cisys**](https://github.com/mnemosyne-systems/cisys) is built on [Java](https://en.wikipedia.org/wiki/Java_(programming_language)) 25 and [Quarkus](https://quarkus.io/) 4.0 using [PostgreSQL](https://www.postgresql.org/) as the database.
 
 The sources are in `src/backend/main/java/ai/mnemosyne/cisys`.
 

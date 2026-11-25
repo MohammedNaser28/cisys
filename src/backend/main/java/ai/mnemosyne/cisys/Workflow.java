@@ -9,13 +9,6 @@
 package ai.mnemosyne.cisys;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
-import com.fasterxml.jackson.databind.json.JsonMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -24,6 +17,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.StreamReadFeature;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.exc.UnrecognizedPropertyException;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.dataformat.yaml.YAMLMapper;
 
 /**
  * A CI workflow, read from {@value #PATH} in a project's repository.
@@ -143,11 +143,13 @@ public record Workflow(
   }
 
   private static final ObjectMapper MAPPER =
-      JsonMapper.builder(new YAMLFactory())
-          .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
+      YAMLMapper.builder()
+          .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
           .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
           .enable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
           .disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT)
+          // Off by default before Jackson 3; documents after the first one are ignored.
+          .disable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
           .build();
 
   /** Reads the workflow from a checkout, or returns null when the repository has none. */
@@ -204,14 +206,14 @@ public record Workflow(
       workflow = MAPPER.readValue(yaml, Workflow.class);
     } catch (UnrecognizedPropertyException e) {
       throw new InvalidWorkflowException("Unknown key '" + e.getPropertyName() + "'" + location(e));
-    } catch (JsonProcessingException e) {
+    } catch (JacksonException e) {
       throw new InvalidWorkflowException(e.getOriginalMessage() + location(e));
     }
     workflow.validate();
     return workflow;
   }
 
-  private static String location(JsonProcessingException e) {
+  private static String location(JacksonException e) {
     return e.getLocation() == null ? "" : " at line " + e.getLocation().getLineNr();
   }
 
@@ -893,7 +895,7 @@ public record Workflow(
   private static String exec(String... args) {
     try {
       return JSON.writeValueAsString(args);
-    } catch (JsonProcessingException e) {
+    } catch (JacksonException e) {
       throw new IllegalStateException(e);
     }
   }

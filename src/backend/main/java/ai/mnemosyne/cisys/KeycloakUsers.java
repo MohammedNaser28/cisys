@@ -8,10 +8,6 @@
 
 package ai.mnemosyne.cisys;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.io.IOException;
@@ -30,6 +26,11 @@ import java.util.Optional;
 import java.util.Set;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
 
 /**
  * Manages users through the Keycloak Admin REST API with the {@code cisys-backend} service account,
@@ -93,7 +94,7 @@ public class KeycloakUsers implements UserDirectory {
   public String role(String id) {
     Set<String> names = new HashSet<>();
     send("GET", "/users/" + encode(id) + "/role-mappings/realm")
-        .forEach(r -> names.add(r.path("name").asText()));
+        .forEach(r -> names.add(r.path("name").asString()));
     String role = null;
     for (String r : ROLES) {
       if (names.contains(r)) {
@@ -134,7 +135,7 @@ public class KeycloakUsers implements UserDirectory {
     ArrayNode remove = json.createArrayNode();
     send("GET", path)
         .forEach(r -> {
-          String name = r.path("name").asText();
+          String name = r.path("name").asString();
           if (ROLES.contains(name) && !name.equals(role)) {
             remove.add(r);
           }
@@ -195,8 +196,8 @@ public class KeycloakUsers implements UserDirectory {
 
   private static User user(JsonNode u) {
     return new User(
-        u.path("id").asText(),
-        u.path("username").asText(),
+        u.path("id").asString(),
+        u.path("username").asString(),
         text(u, "email"),
         text(u, "firstName"),
         text(u, "lastName"),
@@ -205,7 +206,7 @@ public class KeycloakUsers implements UserDirectory {
 
   private static String text(JsonNode node, String field) {
     JsonNode value = node.get(field);
-    return value == null || value.isNull() ? null : value.asText();
+    return value == null || value.isNull() ? null : value.asString();
   }
 
   /** The subject of the user whose username matches, or null. */
@@ -247,7 +248,7 @@ public class KeycloakUsers implements UserDirectory {
     try {
       String body = response.body();
       return body == null || body.isBlank() ? json.nullNode() : json.readTree(body);
-    } catch (IOException e) {
+    } catch (JacksonException e) {
       throw new UnavailableException("Keycloak sent an unreadable answer");
     }
   }
@@ -266,7 +267,7 @@ public class KeycloakUsers implements UserDirectory {
           return value;
         }
       }
-    } catch (IOException | RuntimeException e) {
+    } catch (RuntimeException e) {
       // Not JSON: use the fallback.
     }
     return fallback;
@@ -294,7 +295,7 @@ public class KeycloakUsers implements UserDirectory {
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new UnavailableException("Interrupted");
-    } catch (IOException e) {
+    } catch (IOException | JacksonException e) {
       LOG.warnf("Keycloak is unreachable: %s", e.toString());
       throw new UnavailableException("Keycloak is unreachable");
     }
@@ -329,7 +330,7 @@ public class KeycloakUsers implements UserDirectory {
           clientId, response.statusCode());
       throw new UnavailableException("Keycloak refused the service account");
     }
-    token = body.get("access_token").asText();
+    token = body.get("access_token").asString();
     tokenExpires = Instant.now().plusSeconds(Math.max(0, body.path("expires_in").asLong(60) - 10));
     return token;
   }
