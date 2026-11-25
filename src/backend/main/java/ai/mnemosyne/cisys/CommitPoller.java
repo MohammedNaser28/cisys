@@ -111,7 +111,7 @@ public class CommitPoller {
   public int poll() {
     Settings settings = QuarkusTransaction.requiringNew().call(Settings::current);
     if (!settings.pollEnabled && !settings.pullRequestsEnabled) {
-      cleanUpDisabled();
+      cleanUpDisabled(settings.mirrorManualBuilds);
       return 0;
     }
     // Turning branch polling off resets the branch cursors, so a later enable seeds instead of
@@ -387,11 +387,12 @@ public class CommitPoller {
   }
 
   /**
-   * Removes mirrors and cursors while polling is off, so switching it back on seeds instead of
-   * building what happened while it was off. A project with a queued or running poll build is left
-   * alone, because that build reads its mirror at run time.
+   * Removes cursors and (when manual-build mirroring is off) mirrors while polling is off, so
+   * switching it back on seeds instead of building what happened while it was off. A project with a
+   * queued or running build is left alone when deleting mirrors, because that build reads its
+   * mirror at run time.
    */
-  private void cleanUpDisabled() {
+  private void cleanUpDisabled(boolean keepMirrors) {
     List<Project> projects = QuarkusTransaction.requiringNew().call(() -> Project.listAll());
     Set<Long> ids = new HashSet<>();
     for (Project project : projects) {
@@ -402,14 +403,16 @@ public class CommitPoller {
       }
       try {
         pullRequests.disableProject(project.id);
-        if (hasActiveBuild(project.id)) {
-          continue;
+        if (!keepMirrors) {
+          if (hasActiveBuild(project.id)) {
+            continue;
+          }
+          mirrors.delete(project.id);
+          fetchFailures.remove(project.id);
+          oversized.remove(project.id);
+          limitWarned.remove(project.id);
         }
-        mirrors.delete(project.id);
         QuarkusTransaction.requiringNew().run(() -> ProjectBranch.delete("projectId", project.id));
-        fetchFailures.remove(project.id);
-        oversized.remove(project.id);
-        limitWarned.remove(project.id);
       } finally {
         lock.unlock();
       }
@@ -427,7 +430,7 @@ public class CommitPoller {
     }
   }
 
-  /** Removes mirrors whose project is gone, unless a poll build still reads them. */
+  /** Removes mirrors whose project is gone, unless an active build still reads them. */
   private void sweepOrphans(Set<Long> live) {
     Path root = mirrors.root();
     if (!Files.isDirectory(root)) {
@@ -473,7 +476,7 @@ public class CommitPoller {
             Build.count(
                     "projectId = ?1 and trigger in ?2 and status in ?3",
                     projectId,
-                    List.of(Build.Trigger.POLL, Build.Trigger.PULL_REQUEST),
+                    List.of(Build.Trigger.POLL, Build.Trigger.PULL_REQUEST, Build.Trigger.MANUAL),
                     List.of(Build.Status.QUEUED, Build.Status.RUNNING))
                 > 0);
   }

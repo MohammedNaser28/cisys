@@ -942,4 +942,67 @@ class CommitPollerTest {
           component.getName() + " must not be request input");
     }
   }
+
+  @Test
+  void disablingPollingKeepsMirrorsWhenMirrorManualBuildsIsEnabled() throws Exception {
+    source = newRepository("keep-manual-mirror");
+    workflow(source, "add workflow");
+    Long id = project("keep-manual-mirror", source);
+    poller.poll();
+    assertTrue(Files.isDirectory(mirrors.path(id)));
+    assertNotNull(cursor(id, "main"));
+
+    set(Settings.Granularity.PER_COMMIT, Settings.Scope.WORKFLOW, false);
+    mirrorManualBuilds(true);
+
+    poller.poll();
+    assertTrue(
+        Files.isDirectory(mirrors.path(id)),
+        "live project mirror must be kept when mirrorManualBuilds is enabled");
+    assertNull(cursor(id, "main"), "branch cursors must still reset when polling is off");
+  }
+
+  @Test
+  void cleanUpDisabledKeepsMirrorWhileManualBuildIsRunning() throws Exception {
+    source = newRepository("active-manual-mirror");
+    workflow(source, "add workflow");
+    Long id = project("active-manual-mirror", source);
+    set(Settings.Granularity.PER_COMMIT, Settings.Scope.WORKFLOW, false);
+    mirrorManualBuilds(true);
+    Path mirror = runner.mirrorFor(manual(id));
+    assertTrue(Files.isDirectory(mirror));
+
+    Long buildId =
+        QuarkusTransaction.requiringNew()
+            .call(() -> {
+              Build b = new Build();
+              b.projectId = id;
+              b.number = Build.nextNumber(id);
+              b.requestedBy = "owner";
+              b.trigger = Build.Trigger.MANUAL;
+              b.status = Build.Status.RUNNING;
+              b.branch = "main";
+              b.requestedAt = Instant.now();
+              b.startedAt = Instant.now();
+              b.persist();
+              return b.id;
+            });
+
+    mirrorManualBuilds(false);
+    poller.poll();
+    assertTrue(
+        Files.isDirectory(mirrors.path(id)),
+        "mirror must not be deleted while an active manual build is running");
+
+    QuarkusTransaction.requiringNew()
+        .run(() -> {
+          Build b = Build.findById(buildId);
+          b.status = Build.Status.PASSED;
+          b.finishedAt = Instant.now();
+        });
+    poller.poll();
+    assertFalse(
+        Files.exists(mirrors.path(id)),
+        "mirror should be deleted once the manual build finishes and mirroring is off");
+  }
 }
