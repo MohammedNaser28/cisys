@@ -142,8 +142,9 @@ public class AuditResource {
     }
     String query = where + " order by occurredAt desc, id desc";
     long total = AuditEvent.count(where.toString(), params);
+    int last = (int) Math.min(Integer.MAX_VALUE, (long) offset + size - 1);
     List<EventView> events =
-        AuditEvent.<AuditEvent>find(query, params).range(offset, offset + size - 1).list().stream()
+        AuditEvent.<AuditEvent>find(query, params).range(offset, last).list().stream()
             .map(this::view)
             .toList();
     return new Page(events, (int) Math.min(Integer.MAX_VALUE, total));

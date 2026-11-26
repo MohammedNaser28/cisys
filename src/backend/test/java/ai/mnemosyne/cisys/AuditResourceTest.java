@@ -395,6 +395,29 @@ class AuditResourceTest {
         @Claim(key = "sub", value = "admin-id"),
         @Claim(key = "preferred_username", value = "admin")
       })
+  void largeFirstOffsetDoesNotOverflowRangeEnd() {
+    given()
+        .queryParam("first", Integer.MAX_VALUE)
+        .get(PATH)
+        .then()
+        .statusCode(200)
+        .body("events", hasSize(0));
+    given()
+        .queryParam("first", Integer.MAX_VALUE - 10)
+        .queryParam("max", 50)
+        .get(PATH)
+        .then()
+        .statusCode(200)
+        .body("events", hasSize(0));
+  }
+
+  @Test
+  @TestSecurity(user = "admin", roles = "admin")
+  @JwtSecurity(
+      claims = {
+        @Claim(key = "sub", value = "admin-id"),
+        @Claim(key = "preferred_username", value = "admin")
+      })
   void filtersByEveryDocumentedField() {
     Instant now = Instant.now();
     event(
